@@ -1,0 +1,175 @@
+@import "tailwindcss";
+
+@plugin "tailwindcss-animate";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+
+  --color-sidebar: hsl(var(--sidebar-background));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans:
+    var(--font-noto-sans-kr), ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+@layer base {
+  :root {
+    /* Light theme based on your palette:
+       1) #20448C, 2) #086CB4, 3) #008CDB, 4) #FFBC24, 5) #FFD340 */
+    --background: 0 0% 100%;
+    --foreground: 222 15% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 15% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 15% 15%;
+    /* Primary: 짙은 네이비 블루 (#20448C ≈ hsl(211 63% 34%)) */
+    --primary: 211 63% 34%;
+    --primary-foreground: 0 0% 100%;
+    /* Secondary: 중간 블루 (#086CB4 ≈ hsl(191 88% 27%)) */
+    --secondary: 191 88% 27%;
+    --secondary-foreground: 0 0% 100%;
+    /* Muted / 배경 계열 */
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 15% 45%;
+    /* Accent: 브랜드 옐로우 (#FFBC24 ≈ hsl(42 100% 57%)) */
+    --accent: 42 100% 57%;
+    --accent-foreground: 26 83% 14%;
+    /* Destructive: 기본 레드 톤 유지 */
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 214 20% 89%;
+    --input: 214 20% 89%;
+    --ring: 211 63% 34%;
+    /* 차트 컬러를 남은 팔레트에 매핑 */
+    --chart-1: 211 63% 34%;  /* #20448C */
+    --chart-2: 191 88% 27%;  /* #086CB4 */
+    --chart-3: 194 100% 36%; /* ≈ #008CDB */
+    --chart-4: 42 100% 57%;  /* #FFBC24 */
+    --chart-5: 46 100% 63%;  /* #FFD340 */
+    --radius: 0.5rem;
+    --sidebar-background: 210 40% 98%;
+    --sidebar-foreground: 222 15% 20%;
+    --sidebar-primary: 211 63% 34%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 42 100% 57%;
+    --sidebar-accent-foreground: 26 83% 14%;
+    --sidebar-border: 214 20% 89%;
+    --sidebar-ring: 211 63% 34%;
+  }
+
+  .dark {
+    /* Dark theme: palette를 어둡게 재해석 */
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 15%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 15%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 211 63% 60%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 191 88% 40%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 222 25% 18%;
+    --muted-foreground: 220 10% 70%;
+    --accent: 46 100% 63%;
+    --accent-foreground: 26 83% 14%;
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 222 25% 25%;
+    --input: 222 25% 25%;
+    --ring: 211 63% 60%;
+    --chart-1: 211 63% 60%;
+    --chart-2: 191 88% 45%;
+    --chart-3: 194 100% 42%;
+    --chart-4: 42 100% 57%;
+    --chart-5: 46 100% 63%;
+    --sidebar-background: 222 47% 11%;
+    --sidebar-foreground: 210 40% 96%;
+    --sidebar-primary: 211 63% 60%;
+    --sidebar-primary-foreground: 222 47% 11%;
+    --sidebar-accent: 222 25% 18%;
+    --sidebar-accent-foreground: 210 40% 96%;
+    --sidebar-border: 222 25% 25%;
+    --sidebar-ring: 211 63% 60%;
+  }
+}
+
+@layer base {
+  /*
+   * Tailwind v4 기본 border 색상이 `currentColor`로 변경되어, v3 동작을 유지하기 위해
+   * 모든 요소에 테마 border 색상을 기본값으로 적용한다.
+   */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: hsl(var(--border));
+  }
+
+  html {
+    font-size: 12px;
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family:
+      var(--font-sans),
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      Segoe UI,
+      Roboto,
+      Helvetica,
+      Arial,
+      "Apple Color Emoji",
+      "Segoe UI Emoji";
+  }
+}

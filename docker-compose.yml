@@ -1,0 +1,42 @@
+services:
+  backend:
+    build:
+      context: fastapi_backend
+    environment:
+      - TZ=Asia/Seoul
+      - OPENAPI_OUTPUT_FILE=./shared-data/openapi.json
+      - DATABASE_URL=postgresql+asyncpg://postgres:439e19e7328d37abb598d1603dbe9eca8abef29433544c1e@db:5432/app
+    ports:
+      - "8000:8000"
+    volumes:
+      # - ./fastapi_backend:/app
+      # - fastapi-venv:/app/.venv
+      - ./local-shared-data:/app/shared-data
+    depends_on:
+      - db
+  db:
+    image: postgres:18.3-alpine3.23
+    environment:
+      TZ: Asia/Seoul
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 439e19e7328d37abb598d1603dbe9eca8abef29433544c1e
+      POSTGRES_DB: app
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/18/docker
+  frontend:
+    build:
+      context: ./nextjs-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      TZ: Asia/Seoul
+      NODE_ENV: production
+      API_BASE_URL: http://backend:8000
+      OPENAPI_OUTPUT_FILE: ./shared-data/openapi.json
+    volumes:
+      - ./local-shared-data:/app/shared-data
+
+volumes:
+  postgres_data:
