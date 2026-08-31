@@ -11,6 +11,12 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     TEST_DATABASE_URL: str | None = None
     EXPIRE_ON_COMMIT: bool = False
+    # Per-process pool (each Gunicorn worker owns its own pool).
+    # Max DB connections ≈ GUNICORN_WORKERS * (DB_POOL_SIZE + DB_MAX_OVERFLOW).
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 5
+    DB_POOL_RECYCLE: int = 1800
+    DB_POOL_PRE_PING: bool = True
 
     # User
     ACCESS_SECRET_KEY: str

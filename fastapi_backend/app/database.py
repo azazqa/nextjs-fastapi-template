@@ -3,7 +3,6 @@ from urllib.parse import urlparse
 
 from fastapi import Depends
 from fastapi_users.db import SQLAlchemyUserDatabase
-from sqlalchemy import NullPool
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from .config import settings
@@ -18,8 +17,13 @@ async_db_connection_url = (
     f"{parsed_db_url.path}"
 )
 
-# Disable connection pooling for serverless environments like Vercel
-engine = create_async_engine(async_db_connection_url, poolclass=NullPool)
+engine = create_async_engine(
+    async_db_connection_url,
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_recycle=settings.DB_POOL_RECYCLE,
+    pool_pre_ping=settings.DB_POOL_PRE_PING,
+)
 
 async_session_maker = async_sessionmaker(
     engine, expire_on_commit=settings.EXPIRE_ON_COMMIT
