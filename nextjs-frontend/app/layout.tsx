@@ -12,8 +12,8 @@ const notoSansKR = Noto_Sans_KR({
 });
 
 export const metadata: Metadata = {
-  title: "HRD Work24",
-  description: "HRD Work24 Application",
+  title: "Application",
+  description: "Application Description",
 };
 
 export default function RootLayout({

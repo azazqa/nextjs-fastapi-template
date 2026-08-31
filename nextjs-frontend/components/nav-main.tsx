@@ -42,7 +42,7 @@ export function NavMain({
   const pathname = usePathname()
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>HRD Work24</SidebarGroupLabel>
+      <SidebarGroupLabel>Application</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) =>
           item.hasChildren ? (
