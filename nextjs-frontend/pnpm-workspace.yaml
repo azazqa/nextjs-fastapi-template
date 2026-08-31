@@ -1,4 +1,5 @@
 packages:
   - "."
-onlyBuiltDependencies:
-  - sharp
+allowBuilds:
+  '@parcel/watcher': true
+  unrs-resolver: true
