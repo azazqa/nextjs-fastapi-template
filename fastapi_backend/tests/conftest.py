@@ -77,7 +77,7 @@ async def authenticated_user(test_client, db_session):
 
     # Create user data
     user_data = {
-        "id": uuid.uuid4(),
+        "id": uuid.uuid7(),
         "email": "test@example.com",
         "hashed_password": PasswordHelper().hash("TestPassword123#"),
         "is_active": True,
