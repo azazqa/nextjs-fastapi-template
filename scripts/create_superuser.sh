@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Creates/updates an ERP superuser (docker or local).
+# Creates/updates an application superuser (docker or local).
 #
 # Fixed user:
-# - email: erp@bdf.kr
+# - email: admin@example.com
 # - full_name: 관리자
 # - is_superuser: true
 #
@@ -27,7 +27,7 @@ if [[ "${MODE}" != "docker" && "${MODE}" != "local" ]]; then
   exit 1
 fi
 
-read -r -p "Superuser email (fixed): erp@bdf.kr. Continue? [y/N] " OK
+read -r -p "Superuser email (fixed): admin@example.com. Continue? [y/N] " OK
 if [[ "${OK}" != "y" && "${OK}" != "Y" ]]; then
   echo "Aborted."
   exit 2
