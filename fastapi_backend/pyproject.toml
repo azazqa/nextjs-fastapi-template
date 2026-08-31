@@ -17,6 +17,8 @@ dependencies = [
     "watchfiles>=1.1.0",
     "greenlet>=3.2.3",
     "pillow>=11.3.0",
+    "apscheduler>=3.11.2",
+    "psycopg2-binary>=2.9.12",
 ]
 
 [dependency-groups]

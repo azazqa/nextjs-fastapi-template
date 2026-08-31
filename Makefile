@@ -33,7 +33,8 @@ test-frontend: ## Run frontend tests using npm
 
 # Docker commands
 .PHONY: docker-backend-shell docker-frontend-shell docker-build docker-build-backend \
-        docker-build-frontend docker-start-backend docker-start-frontend docker-up-test-db \
+        docker-build-frontend docker-start-backend docker-start-frontend docker-start-scheduler \
+        docker-logs-scheduler docker-up-test-db \
         docker-migrate-db docker-db-schema docker-test-backend docker-test-frontend
 
 
@@ -57,6 +58,12 @@ docker-start-backend: ## Start the backend container
 
 docker-start-frontend: ## Start the frontend container
 	$(DOCKER_COMPOSE) up --build frontend
+
+docker-start-scheduler: ## Start the scheduler container
+	$(DOCKER_COMPOSE) up --build scheduler
+
+docker-logs-scheduler: ## Follow scheduler container logs
+	$(DOCKER_COMPOSE) logs -f scheduler
 
 docker-up-test-db: ## Start the test database container
 	$(DOCKER_COMPOSE) up db_test

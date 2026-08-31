@@ -26,13 +26,16 @@ function isSectionActive(pathname: string, item: { url: string; items?: { url: s
 
 export function NavMain({
   items,
+  isSuperuser = false,
 }: {
+  isSuperuser?: boolean
   items: {
     title: string
     url: string
     icon?: LucideIcon
     isActive?: boolean
     hasChildren?: boolean
+    superuserOnly?: boolean
     items?: {
       title: string
       url: string
@@ -40,11 +43,12 @@ export function NavMain({
   }[]
 }) {
   const pathname = usePathname()
+  const visibleItems = items.filter((item) => !item.superuserOnly || isSuperuser)
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Application</SidebarGroupLabel>
       <SidebarMenu>
-        {items.map((item) =>
+        {visibleItems.map((item) =>
           item.hasChildren ? (
             <Collapsible
               key={item.title}

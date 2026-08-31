@@ -9,11 +9,14 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function AppSidebar({
+  isSuperuser = false,
+  ...props
+}: React.ComponentProps<typeof Sidebar> & { isSuperuser?: boolean }) {
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarContent>
-        <NavMain items={navMain} />
+        <NavMain items={navMain} isSuperuser={isSuperuser} />
       </SidebarContent>
       <SidebarRail />
     </Sidebar>

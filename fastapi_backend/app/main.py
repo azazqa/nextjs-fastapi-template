@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi_pagination import add_pagination
 
 from app.config import settings
+from app.routes.admin_scheduler import router as admin_scheduler_router
 from app.routes.auth_refresh import router as auth_refresh_router
 from app.schemas import UserRead, UserUpdate
 from app.users import AUTH_URL_PATH, auth_backend, fastapi_users
@@ -41,3 +43,9 @@ app.include_router(
     prefix="/users",
     tags=["users"],
 )
+app.include_router(
+    admin_scheduler_router,
+    prefix="/admin/scheduler",
+    tags=["admin-scheduler"],
+)
+add_pagination(app)

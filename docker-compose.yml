@@ -37,6 +37,15 @@ services:
       OPENAPI_OUTPUT_FILE: ./shared-data/openapi.json
     volumes:
       - ./local-shared-data:/app/shared-data
+  scheduler:
+    build:
+      context: fastapi_backend
+    command: ["/app/.venv/bin/python", "-m", "scheduler.runner"]
+    environment:
+      - TZ=Asia/Seoul
+      - DATABASE_URL=postgresql+asyncpg://postgres:439e19e7328d37abb598d1603dbe9eca8abef29433544c1e@db:5432/app
+    depends_on:
+      - db
 
 volumes:
   postgres_data:

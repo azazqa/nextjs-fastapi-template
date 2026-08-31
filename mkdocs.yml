@@ -67,6 +67,7 @@ nav:
   - Home: README.md
   - Get Started: get-started.md
   - Additional Settings: additional-settings.md
+  - Scheduler: scheduler.md
   - Technology Selection: technology-selection.md
   - Deployment: deployment.md
   - Changelog: CHANGELOG.md
