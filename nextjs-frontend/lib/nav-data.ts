@@ -6,8 +6,9 @@ export interface NavItem {
   icon?: LucideIcon
   isActive?: boolean
   hasChildren?: boolean
-  superuserOnly?: boolean
-  items?: { title: string; url: string }[]
+  /** Show when user has any of these permissions (or is superuser). */
+  requiredPermissions?: string[]
+  items?: { title: string; url: string; requiredPermissions?: string[] }[]
 }
 
 export const navMain: NavItem[] = [
@@ -22,11 +23,12 @@ export const navMain: NavItem[] = [
     url: "#",
     icon: Users,
     hasChildren: true,
-    superuserOnly: true,
+    requiredPermissions: ["scheduler:read"],
     items: [
       {
         title: "스케줄 관리",
         url: "/admin/scheduler",
+        requiredPermissions: ["scheduler:read"],
       },
     ],
   },

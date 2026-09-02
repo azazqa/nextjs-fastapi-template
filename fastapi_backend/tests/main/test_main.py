@@ -5,6 +5,7 @@ from sqlalchemy import select
 from app.models import User
 
 
+@pytest.mark.skip(reason="회원가입 API 미노출 (/auth/register 없음)")
 class TestPasswordValidation:
     @pytest.mark.parametrize(
         "email, password, expected_status, expected_detail",

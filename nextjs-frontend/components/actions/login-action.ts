@@ -61,7 +61,7 @@ export async function login(prevState: unknown, formData: FormData) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 3 * 3600, // 3h; align with backend REFRESH_TOKEN_EXPIRE_SECONDS
+      maxAge: 24 * 3600, // 1d; align with backend REFRESH_TOKEN_EXPIRE_SECONDS
       path: "/",
     });
   } catch (err) {

@@ -47,21 +47,31 @@ export async function requireAccessToken(): Promise<string> {
     await logoutAndRedirect();
   }
 
-  const data = (await res.json()) as Partial<RefreshResponse>;
+  const data = (await res.json()) as Partial<RefreshResponse> & {
+    refresh_token?: string;
+  };
   const accessToken = data.access_token;
   if (!accessToken) {
     return await logoutAndRedirect();
   }
 
-  // 서버 액션/라우트 핸들러가 아닌 렌더링 컨텍스트에서는 set이 금지될 수 있다.
-  // 이 경우 쿠키 저장은 건너뛰고, 현재 요청에서만 accessToken을 사용한다.
   try {
     store.set("accessToken", accessToken, {
       httpOnly: true,
       sameSite: "lax",
       path: "/",
       secure: process.env.NODE_ENV === "production",
+      maxAge: 3600,
     });
+    if (data.refresh_token) {
+      store.set("refreshToken", data.refresh_token, {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 24 * 3600,
+      });
+    }
   } catch {}
 
   return accessToken;

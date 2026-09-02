@@ -73,7 +73,7 @@ describe("login action", () => {
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        maxAge: 3 * 3600,
+        maxAge: 24 * 3600,
       })
     );
   });

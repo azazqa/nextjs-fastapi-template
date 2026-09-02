@@ -1,10 +1,11 @@
-import { assertServerSuperuser } from "@/lib/permissions-server";
+import { assertServerPermission } from "@/lib/permissions-server";
 
 export async function proxyAdminRequest(
   request: Request,
   backendPath: string,
+  permission: string,
 ): Promise<Response> {
-  const auth = await assertServerSuperuser();
+  const auth = await assertServerPermission(permission);
   if (!auth.ok) {
     return new Response(auth.message, { status: auth.status });
   }

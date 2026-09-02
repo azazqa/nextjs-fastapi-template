@@ -1,12 +1,44 @@
 import { cookies } from "next/headers";
 
-type ServerUserMe = {
-  id?: string;
-  email?: string | null;
-  is_superuser?: boolean;
-};
+import { hasPermission, type UserPermissions } from "@/lib/permissions";
+
+export type ServerUserMe = UserPermissions;
+export { hasPermission };
 
 type CookieStore = Awaited<ReturnType<typeof cookies>>;
+
+const REFRESH_MAX_AGE = 24 * 3600;
+const ACCESS_MAX_AGE = 3600;
+
+async function applyRefreshCookies(
+  store: CookieStore,
+  data: { access_token?: string; refresh_token?: string },
+): Promise<string | null> {
+  if (!data.access_token) return null;
+
+  try {
+    store.set("accessToken", data.access_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: ACCESS_MAX_AGE,
+      path: "/",
+    });
+    if (data.refresh_token) {
+      store.set("refreshToken", data.refresh_token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: REFRESH_MAX_AGE,
+        path: "/",
+      });
+    }
+  } catch {
+    // Route handler context may forbid set; token is still valid for this request.
+  }
+
+  return data.access_token;
+}
 
 async function refreshServerAccessToken(store: CookieStore): Promise<string | null> {
   const refresh = store.get("refreshToken")?.value;
@@ -23,22 +55,8 @@ async function refreshServerAccessToken(store: CookieStore): Promise<string | nu
     });
     if (!res.ok) return null;
 
-    const data = (await res.json()) as { access_token?: string };
-    if (!data.access_token) return null;
-
-    try {
-      store.set("accessToken", data.access_token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 3600,
-        path: "/",
-      });
-    } catch {
-      // Route handler context may forbid set; token is still valid for this request.
-    }
-
-    return data.access_token;
+    const data = (await res.json()) as { access_token?: string; refresh_token?: string };
+    return applyRefreshCookies(store, data);
   } catch {
     return null;
   }
@@ -77,10 +95,35 @@ async function fetchServerUserMe(): Promise<{ me: ServerUserMe; token: string } 
   }
 }
 
-/** Whether the current session user is a superuser (server-side, uses access token cookie). */
 export async function getServerIsSuperuser(): Promise<boolean> {
   const result = await fetchServerUserMe();
   return Boolean(result?.me.is_superuser);
+}
+
+export async function getServerPermissions(): Promise<string[]> {
+  const result = await fetchServerUserMe();
+  return result?.me.permissions ?? [];
+}
+
+export async function getServerUserMe(): Promise<ServerUserMe | null> {
+  const result = await fetchServerUserMe();
+  return result?.me ?? null;
+}
+
+/** Permission-aware API routes: reject missing session (401) or missing permission (403). */
+export async function assertServerPermission(
+  ...codes: string[]
+): Promise<
+  { ok: true; token: string; me: ServerUserMe } | { ok: false; status: 401 | 403; message: string }
+> {
+  const result = await fetchServerUserMe();
+  if (!result) {
+    return { ok: false, status: 401, message: "Unauthorized" };
+  }
+  if (!hasPermission(result.me, ...codes)) {
+    return { ok: false, status: 403, message: "Forbidden" };
+  }
+  return { ok: true, token: result.token, me: result.me };
 }
 
 /** Superuser-only API routes: reject missing session (401) or non-superuser (403). */

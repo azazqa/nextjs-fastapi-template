@@ -66,7 +66,7 @@ docker-logs-scheduler: ## Follow scheduler container logs
 	$(DOCKER_COMPOSE) logs -f scheduler
 
 docker-up-test-db: ## Start the test database container
-	$(DOCKER_COMPOSE) up db_test
+	$(DOCKER_COMPOSE) up -d db_test
 
 docker-migrate-db: ## Run database migrations using Alembic
 	$(DOCKER_COMPOSE) run --rm backend alembic upgrade head
@@ -75,7 +75,10 @@ docker-db-schema: ## Generate a new migration schema. Usage: make docker-db-sche
 	$(DOCKER_COMPOSE) run --rm backend alembic revision --autogenerate -m "$(migration_name)"
 
 docker-test-backend: ## Run tests for the backend
-	$(DOCKER_COMPOSE) run --rm backend pytest
+	$(DOCKER_COMPOSE) up -d db_test
+	$(DOCKER_COMPOSE) run --rm \
+	  -e TEST_DATABASE_URL=postgresql+asyncpg://postgres:439e19e7328d37abb598d1603dbe9eca8abef29433544c1e@db_test:5433/app \
+	  backend pytest
 
 docker-test-frontend: ## Run tests for the frontend
 	$(DOCKER_COMPOSE) run --rm frontend pnpm run test

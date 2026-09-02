@@ -7,5 +7,6 @@ export async function POST(request: Request, { params }: Params) {
   return proxyAdminRequest(
     request,
     `/admin/scheduler/jobs/${encodeURIComponent(jobKey)}/enqueue-run`,
+    "scheduler:manage",
   );
 }

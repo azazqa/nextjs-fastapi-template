@@ -1,7 +1,7 @@
 import { AppSidebar } from "@/components/app-sidebar"
 import { PageTitle } from "@/components/page-title"
 import { UserMenu } from "@/components/user-menu"
-import { getServerIsSuperuser } from "@/lib/permissions-server"
+import { getServerUserMe } from "@/lib/permissions-server"
 import {
   SidebarInset,
   SidebarProvider,
@@ -16,10 +16,10 @@ export default async function ProtectedLayout({
 }: {
   children: React.ReactNode
 }) {
-  const isSuperuser = await getServerIsSuperuser()
+  const userMe = await getServerUserMe()
   return (
     <SidebarProvider>
-      <AppSidebar isSuperuser={isSuperuser} />
+      <AppSidebar userMe={userMe} />
       <SidebarInset>
         <header className="flex h-16 border-b-2 border-indigo-700 shrink-0 items-center justify-between transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 px-4">
           <div className="flex items-center gap-2">

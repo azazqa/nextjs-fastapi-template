@@ -4,7 +4,11 @@ type Params = { params: Promise<{ jobKey: string }> };
 
 export async function PATCH(request: Request, { params }: Params) {
   const { jobKey } = await params;
-  return proxyAdminRequest(request, `/admin/scheduler/jobs/${encodeURIComponent(jobKey)}`);
+  return proxyAdminRequest(
+    request,
+    `/admin/scheduler/jobs/${encodeURIComponent(jobKey)}`,
+    "scheduler:manage",
+  );
 }
 
 export async function DELETE(_request: Request, { params }: Params) {
@@ -12,5 +16,6 @@ export async function DELETE(_request: Request, { params }: Params) {
   return proxyAdminRequest(
     new Request(_request.url, { method: "DELETE" }),
     `/admin/scheduler/jobs/${encodeURIComponent(jobKey)}`,
+    "scheduler:manage",
   );
 }

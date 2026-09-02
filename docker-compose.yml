@@ -15,7 +15,7 @@ services:
     depends_on:
       - db
   db:
-    image: postgres:18.3-alpine3.23
+    image: postgres:18.6-trixie
     environment:
       TZ: Asia/Seoul
       POSTGRES_USER: postgres
@@ -25,6 +25,17 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/18/docker
+  db_test:
+    image: postgres:18.6-trixie
+    environment:
+      TZ: Asia/Seoul
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 439e19e7328d37abb598d1603dbe9eca8abef29433544c1e
+      POSTGRES_DB: app
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/18/docker
   frontend:
     build:
       context: ./nextjs-frontend
@@ -49,3 +60,4 @@ services:
 
 volumes:
   postgres_data:
+  postgres_test_data:

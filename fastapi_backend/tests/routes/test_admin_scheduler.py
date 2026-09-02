@@ -3,30 +3,14 @@ import uuid
 import pytest
 import pytest_asyncio
 from fastapi_users.password import PasswordHelper
+from sqlalchemy import select
 
-from app.models import SchedulerJob, User
+from app.models import Role, SchedulerJob, User, UserRole
 
 
-@pytest_asyncio.fixture
-async def superuser_headers(test_client, db_session):
-    user = User(
-        id=uuid.uuid7(),
-        email="admin@example.com",
-        hashed_password=PasswordHelper().hash("AdminPassword123#"),
-        is_active=True,
-        is_superuser=True,
-        is_verified=True,
-    )
-    db_session.add(user)
-    await db_session.commit()
-
-    res = await test_client.post(
-        "/auth/jwt/login",
-        data={"username": "admin@example.com", "password": "AdminPassword123#"},
-    )
-    assert res.status_code == 200
-    token = res.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+@pytest_asyncio.fixture(loop_scope="function")
+async def operator_headers(operator_user):
+    return operator_user["headers"]
 
 
 @pytest.mark.asyncio
@@ -36,7 +20,7 @@ async def test_list_scheduler_jobs_requires_auth(test_client):
 
 
 @pytest.mark.asyncio
-async def test_list_scheduler_jobs_forbidden_for_non_superuser(
+async def test_list_scheduler_jobs_forbidden_without_role(
     test_client, authenticated_user
 ):
     res = await test_client.get(
@@ -47,8 +31,8 @@ async def test_list_scheduler_jobs_forbidden_for_non_superuser(
 
 
 @pytest.mark.asyncio
-async def test_list_scheduler_jobs_for_superuser(
-    test_client, db_session, superuser_headers
+async def test_list_scheduler_jobs_for_operator(
+    test_client, db_session, operator_headers
 ):
     job = SchedulerJob(
         job_key="sample_heartbeat",
@@ -62,7 +46,7 @@ async def test_list_scheduler_jobs_for_superuser(
     db_session.add(job)
     await db_session.commit()
 
-    res = await test_client.get("/admin/scheduler/jobs", headers=superuser_headers)
+    res = await test_client.get("/admin/scheduler/jobs", headers=operator_headers)
     assert res.status_code == 200
     data = res.json()
     assert len(data) == 1
@@ -70,7 +54,7 @@ async def test_list_scheduler_jobs_for_superuser(
 
 
 @pytest.mark.asyncio
-async def test_enqueue_run_now(test_client, db_session, superuser_headers):
+async def test_enqueue_run_now(test_client, db_session, operator_headers):
     job = SchedulerJob(
         job_key="sample_heartbeat",
         title="Sample Heartbeat",
@@ -84,7 +68,7 @@ async def test_enqueue_run_now(test_client, db_session, superuser_headers):
 
     res = await test_client.post(
         "/admin/scheduler/jobs/sample_heartbeat/enqueue-run",
-        headers=superuser_headers,
+        headers=operator_headers,
     )
     assert res.status_code == 200
     body = res.json()

@@ -9,10 +9,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.current_user import CurrentUser, require
 from app.database import get_async_session
-from app.models import SchedulerJob, SchedulerJobLog, SchedulerJobQueue, User
+from app.models import SchedulerJob, SchedulerJobLog, SchedulerJobQueue
 from app.pagination import MAX_PAGE_SIZE, Page, Params
-from app.users import current_superuser
 
 router = APIRouter()
 
@@ -108,7 +108,7 @@ def _transform_logs(rows: list[SchedulerJobLog]) -> list[SchedulerJobLogRead]:
 async def list_scheduler_jobs(
     q: str | None = Query(default=None, description="job_key 또는 title 검색"),
     session: AsyncSession = Depends(get_async_session),
-    _: User = Depends(current_superuser),
+    _: CurrentUser = Depends(require("scheduler:read")),
 ):
     stmt = select(SchedulerJob).where(SchedulerJob.is_delete == False)  # noqa: E712
     if q and q.strip():
@@ -125,7 +125,7 @@ async def list_scheduler_jobs(
 async def create_scheduler_job(
     body: SchedulerJobCreate,
     session: AsyncSession = Depends(get_async_session),
-    _: User = Depends(current_superuser),
+    _: CurrentUser = Depends(require("scheduler:manage")),
 ):
     if body.job_key not in REGISTERED_JOB_KEYS:
         raise HTTPException(
@@ -154,7 +154,7 @@ async def create_scheduler_job(
 async def delete_scheduler_job(
     job_key: str,
     session: AsyncSession = Depends(get_async_session),
-    _: User = Depends(current_superuser),
+    _: CurrentUser = Depends(require("scheduler:manage")),
 ):
     row = await session.get(SchedulerJob, job_key)
     if row is None or row.is_delete:
@@ -168,7 +168,7 @@ async def update_scheduler_job(
     job_key: str,
     body: SchedulerJobUpdate,
     session: AsyncSession = Depends(get_async_session),
-    _: User = Depends(current_superuser),
+    _: CurrentUser = Depends(require("scheduler:manage")),
 ):
     row = await session.get(SchedulerJob, job_key)
     if row is None or row.is_delete:
@@ -189,7 +189,7 @@ async def update_scheduler_job(
 async def enqueue_run_now(
     job_key: str,
     session: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_superuser),
+    user: CurrentUser = Depends(require("scheduler:manage")),
 ):
     job = await session.get(SchedulerJob, job_key)
     if job is None or job.is_delete:
@@ -215,7 +215,7 @@ async def list_job_queue(
     job_key: str | None = Query(default=None),
     q: str | None = Query(default=None, description="job_key 검색"),
     session: AsyncSession = Depends(get_async_session),
-    _: User = Depends(current_superuser),
+    _: CurrentUser = Depends(require("scheduler:read")),
 ):
     if size < 1:
         raise HTTPException(status_code=400, detail="size must be >= 1")
@@ -237,7 +237,7 @@ async def list_job_queue(
 async def cancel_queue_item(
     queue_id: int,
     session: AsyncSession = Depends(get_async_session),
-    _: User = Depends(current_superuser),
+    _: CurrentUser = Depends(require("scheduler:manage")),
 ):
     row = await session.get(SchedulerJobQueue, queue_id)
     if row is None or row.is_delete:
@@ -262,7 +262,7 @@ async def list_job_logs(
     job_id: str | None = Query(default=None),
     status: str | None = Query(default=None),
     session: AsyncSession = Depends(get_async_session),
-    _: User = Depends(current_superuser),
+    _: CurrentUser = Depends(require("scheduler:read")),
 ):
     if size < 1:
         raise HTTPException(status_code=400, detail="size must be >= 1")
@@ -283,7 +283,7 @@ async def clear_stuck_running_log_and_enqueue(
     log_id: int,
     min_age_seconds: int = Query(default=90, ge=5, le=86400),
     session: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_superuser),
+    user: CurrentUser = Depends(require("scheduler:manage")),
 ):
     log = await session.get(SchedulerJobLog, log_id)
     if log is None or log.is_delete:

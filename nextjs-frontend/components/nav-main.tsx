@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation"
 import { ChevronRight, type LucideIcon } from "lucide-react"
 
+import { hasPermission, type UserPermissions } from "@/lib/permissions"
 import {
   Collapsible,
   CollapsibleContent,
@@ -24,26 +25,41 @@ function isSectionActive(pathname: string, item: { url: string; items?: { url: s
   return (item.items ?? []).some((sub) => sub.url !== "#" && (pathname === sub.url || pathname.startsWith(sub.url + "/")))
 }
 
+function canSeeItem(me: UserPermissions | null, required?: string[]): boolean {
+  if (!required?.length) return true
+  return hasPermission(me, ...required)
+}
+
 export function NavMain({
   items,
-  isSuperuser = false,
+  userMe = null,
 }: {
-  isSuperuser?: boolean
+  userMe?: UserPermissions | null
   items: {
     title: string
     url: string
     icon?: LucideIcon
     isActive?: boolean
     hasChildren?: boolean
-    superuserOnly?: boolean
+    requiredPermissions?: string[]
     items?: {
       title: string
       url: string
+      requiredPermissions?: string[]
     }[]
   }[]
 }) {
   const pathname = usePathname()
-  const visibleItems = items.filter((item) => !item.superuserOnly || isSuperuser)
+  const visibleItems = items
+    .filter((item) => canSeeItem(userMe, item.requiredPermissions))
+    .map((item) => ({
+      ...item,
+      items: (item.items ?? []).filter((sub) =>
+        canSeeItem(userMe, sub.requiredPermissions ?? item.requiredPermissions),
+      ),
+    }))
+    .filter((item) => !item.hasChildren || (item.items?.length ?? 0) > 0)
+
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Application</SidebarGroupLabel>

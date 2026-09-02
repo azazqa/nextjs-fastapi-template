@@ -6,14 +6,17 @@ from fastapi_users.password import PasswordHelper
 import uuid
 
 from app.config import settings
-from app.models import User, Base
+from app.models import Role, User, UserRole, Base
+
+from sqlalchemy import select
 
 from app.database import get_user_db, get_async_session
 from app.main import app
+from app.rbac.seed import seed_rbac
 from app.users import get_jwt_strategy
 
 
-@pytest_asyncio.fixture(scope="function")
+@pytest_asyncio.fixture(scope="function", loop_scope="function")
 async def engine():
     """Create a fresh test database engine for each test function."""
     engine = create_async_engine(settings.TEST_DATABASE_URL, echo=True)
@@ -29,7 +32,7 @@ async def engine():
     await engine.dispose()
 
 
-@pytest_asyncio.fixture(scope="function")
+@pytest_asyncio.fixture(scope="function", loop_scope="function")
 async def db_session(engine):
     """Create a fresh database session for each test."""
     async_session_maker = async_sessionmaker(
@@ -37,12 +40,13 @@ async def db_session(engine):
     )
 
     async with async_session_maker() as session:
+        await seed_rbac(session)
         yield session
         await session.rollback()
         await session.close()
 
 
-@pytest_asyncio.fixture(scope="function")
+@pytest_asyncio.fixture(scope="function", loop_scope="function")
 async def test_client(db_session):
     """Fixture to create a test client that uses the test database session."""
 
@@ -70,8 +74,10 @@ async def test_client(db_session):
     ) as client:
         yield client
 
+    app.dependency_overrides.clear()
 
-@pytest_asyncio.fixture(scope="function")
+
+@pytest_asyncio.fixture(scope="function", loop_scope="function")
 async def authenticated_user(test_client, db_session):
     """Fixture to create and authenticate a test user directly in the database."""
 
@@ -100,4 +106,30 @@ async def authenticated_user(test_client, db_session):
         "headers": {"Authorization": f"Bearer {access_token}"},
         "user": user,
         "user_data": {"email": user_data["email"], "password": "TestPassword123#"},
+    }
+
+
+@pytest_asyncio.fixture(scope="function", loop_scope="function")
+async def operator_user(test_client, db_session):
+    """Authenticated user with operator role (scheduler permissions)."""
+    user = User(
+        id=uuid.uuid7(),
+        email="operator@example.com",
+        hashed_password=PasswordHelper().hash("OperatorPassword123#"),
+        is_active=True,
+        is_superuser=False,
+        is_verified=True,
+    )
+    db_session.add(user)
+    await db_session.commit()
+
+    role = await db_session.scalar(select(Role).where(Role.code == "operator"))
+    db_session.add(UserRole(user_id=user.id, role_id=role.id))
+    await db_session.commit()
+
+    strategy = get_jwt_strategy()
+    access_token = await strategy.write_token(user)
+    return {
+        "headers": {"Authorization": f"Bearer {access_token}"},
+        "user": user,
     }
