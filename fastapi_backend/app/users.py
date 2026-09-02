@@ -1,7 +1,7 @@
+import logging
 import uuid
-import re
 
-from typing import Optional
+from typing import Optional, Union
 
 from fastapi import Depends, Request
 from fastapi_users import (
@@ -23,8 +23,11 @@ from .database import get_user_db
 from .email import send_reset_password_email
 from .models import User
 from .schemas import UserCreate
+from .services.password_validation import validate_password_strength
 
 AUTH_URL_PATH = "auth"
+
+logger = logging.getLogger(__name__)
 
 
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
@@ -32,7 +35,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     verification_token_secret = settings.VERIFICATION_SECRET_KEY
 
     async def on_after_register(self, user: User, request: Optional[Request] = None):
-        print(f"User {user.id} has registered.")
+        logger.info("User %s has registered.", user.id)
 
     async def on_after_forgot_password(
         self, user: User, token: str, request: Optional[Request] = None
@@ -42,22 +45,15 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     async def on_after_request_verify(
         self, user: User, token: str, request: Optional[Request] = None
     ):
-        print(f"Verification requested for user {user.id}. Verification token: {token}")
+        logger.info("Verification requested for user %s.", user.id)
 
     async def validate_password(
         self,
         password: str,
-        user: UserCreate,
+        user: Union[UserCreate, User],
     ) -> None:
-        errors = []
-
-        if len(password) < 8:
-            errors.append("Password should be at least 8 characters.")
-        if user.email in password:
-            errors.append("Password should not contain login id.")
-        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
-            errors.append("Password should contain at least one special character.")
-
+        login_id = getattr(user, "email", None)
+        errors = validate_password_strength(password, login_id=login_id)
         if errors:
             raise InvalidPasswordException(reason=errors)
 

@@ -1,7 +1,7 @@
 import { AppSidebar } from "@/components/app-sidebar"
 import { PageTitle } from "@/components/page-title"
 import { UserMenu } from "@/components/user-menu"
-import { getServerUserMe } from "@/lib/permissions-server"
+import { requireServerUserMe } from "@/lib/permissions-server"
 import {
   SidebarInset,
   SidebarProvider,
@@ -16,7 +16,7 @@ export default async function ProtectedLayout({
 }: {
   children: React.ReactNode
 }) {
-  const userMe = await getServerUserMe()
+  const userMe = await requireServerUserMe()
   return (
     <SidebarProvider>
       <AppSidebar userMe={userMe} />

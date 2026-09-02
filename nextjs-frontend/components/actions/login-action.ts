@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { authJwtLogin } from "@/app/clientService";
 import { redirect } from "next/navigation";
 import { loginSchema } from "@/lib/definitions";
+import { readSetCookie } from "@/lib/parse-set-cookie";
 import { getErrorMessage } from "@/lib/utils";
 
 export async function login(prevState: unknown, formData: FormData) {
@@ -56,8 +57,11 @@ export async function login(prevState: unknown, formData: FormData) {
       const text = await refreshRes.text();
       return { server_error: text || "Failed to issue refresh token." };
     }
-    const refreshJson = (await refreshRes.json()) as { refresh_token: string };
-    cookieStore.set("refreshToken", refreshJson.refresh_token, {
+    const refreshToken = readSetCookie(refreshRes.headers, "refreshToken");
+    if (!refreshToken) {
+      return { server_error: "Refresh token cookie was not returned." };
+    }
+    cookieStore.set("refreshToken", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",

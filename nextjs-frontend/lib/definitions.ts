@@ -3,8 +3,14 @@ import { z } from "zod";
 const passwordSchema = z
   .string()
   .min(8, "Password should be at least 8 characters.")
+  .refine((password) => /[A-Za-z]/.test(password), {
+    message: "Password must include letters.",
+  })
+  .refine((password) => /\d/.test(password), {
+    message: "Password must include numbers.",
+  })
   .refine((password) => /[!@#$%^&*(),.?":{}|<>]/.test(password), {
-    message: "Password should contain at least one special character.",
+    message: "Password must include special characters.",
   });
 
 export const passwordResetConfirmSchema = z

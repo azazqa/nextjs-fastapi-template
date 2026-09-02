@@ -47,7 +47,7 @@ if "document:delete" in user.permissions:
 
 ### 원칙 2 — 권한 판정의 정본은 백엔드다
 
-Next.js 미들웨어와 화면 요소 숨김은 **사용자 경험**을 위한 것이지 보안 장치가 아니다. 브라우저는 신뢰할 수 없다.
+Next.js Proxy와 화면 요소 숨김은 **사용자 경험**을 위한 것이지 보안 장치가 아니다. 브라우저는 신뢰할 수 없다.
 
 **모든 권한 판정은 FastAPI가 수행한다.** 앞서 세운 SSOT 원칙과 일관된다.
 
@@ -482,20 +482,24 @@ CREATE TABLE api_keys (
 
 ## 10. Next.js 측 처리
 
-### 미들웨어는 인증만 검사한다
+### Proxy는 인증만 검사한다 (Next.js 16)
+
+Next.js 16부터 `middleware.ts`는 [`proxy.ts`](https://nextjs.org/docs/messages/middleware-to-proxy)로 이름이 변경되었다.
 
 ```ts
-// middleware.ts — 로그인 여부만 확인
-export function middleware(request: NextRequest) {
-  const session = request.cookies.get('session')
-  if (!session && !isPublicPath(request.nextUrl.pathname)) {
-    return NextResponse.redirect(new URL('/login', request.url))
+// proxy.ts — 로그인 여부(쿠키 존재)만 확인
+export async function proxy(request: NextRequest) {
+  const accessToken = request.cookies.get("accessToken")
+  const refreshToken = request.cookies.get("refreshToken")
+
+  if (!accessToken && !refreshToken && !isPublicPath(request.nextUrl.pathname)) {
+    return NextResponse.redirect(new URL("/login", request.url))
   }
   return NextResponse.next()
 }
 ```
 
-**미들웨어에서 권한을 판정하지 않는다.** 미들웨어는 매 요청 실행되므로 여기서 DB를 조회하면 전체 응답이 느려진다. 권한 판정은 FastAPI가 한다.
+**Proxy에서 권한을 판정하지 않는다.** Proxy는 매 요청 실행되므로 여기서 DB를 조회하면 전체 응답이 느려진다. 권한 판정은 FastAPI가 한다. access 만료 시 refresh는 **DAL** (`lib/permissions-server.ts`)과 BFF Route Handler에서 처리한다.
 
 ### 화면 요소 제어
 
@@ -634,7 +638,7 @@ WHERE ur.user_id IS NULL;
 
 ### 프론트엔드
 
-- [ ] 미들웨어는 인증 여부만 검사
+- [ ] `proxy.ts`는 인증 여부(쿠키 존재)만 검사
 - [ ] 권한 배열 기반 UI 분기 (역할 아님)
 - [ ] 403 전용 화면 (로그인 리다이렉트 금지)
 

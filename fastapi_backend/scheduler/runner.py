@@ -13,7 +13,8 @@ from sqlalchemy.orm import Session
 
 from app.models import SchedulerJobQueue
 from scheduler.db import build_scheduler_engine
-from scheduler.queue_processor import KNOWN_JOB_KEYS, process_pending_queue
+from scheduler.jobs.registry import REGISTERED_JOB_KEYS
+from scheduler.queue_processor import process_pending_queue
 
 logging.basicConfig(
     level=logging.INFO,
@@ -75,7 +76,7 @@ def _load_enabled_job_schedules(engine) -> list[tuple[str, int, int, str]]:
     schedules: list[tuple[str, int, int, str]] = []
     for row in rows:
         job_key = str(row["job_key"])
-        if job_key not in KNOWN_JOB_KEYS:
+        if job_key not in REGISTERED_JOB_KEYS:
             logger.warning(
                 "[RUNNER] unknown job_key in scheduler_jobs: %s; skipping cron",
                 job_key,

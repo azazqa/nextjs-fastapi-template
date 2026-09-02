@@ -77,7 +77,7 @@ docker-db-schema: ## Generate a new migration schema. Usage: make docker-db-sche
 docker-test-backend: ## Run tests for the backend
 	$(DOCKER_COMPOSE) up -d db_test
 	$(DOCKER_COMPOSE) run --rm \
-	  -e TEST_DATABASE_URL=postgresql+asyncpg://postgres:439e19e7328d37abb598d1603dbe9eca8abef29433544c1e@db_test:5433/app \
+	  -e TEST_DATABASE_URL=postgresql+asyncpg://postgres:439e19e7328d37abb598d1603dbe9eca8abef29433544c1e@db_test:5432/app \
 	  backend pytest
 
 docker-test-frontend: ## Run tests for the frontend

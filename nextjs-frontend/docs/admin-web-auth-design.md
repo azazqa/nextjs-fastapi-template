@@ -93,7 +93,7 @@
 | refresh 토큰 | `admin_refresh`, **3일**, `path=/api/auth` |
 | access 페이로드 | `user_id`만. **권한 미포함** |
 | refresh 저장 | DB (해시), 회전 + 폐기 가능 |
-| refresh 갱신 위치 | **Next 미들웨어** |
+| refresh 갱신 위치 | **Proxy(쿠키 게이트) + DAL** (`lib/permissions-server.ts`, BFF Route Handlers) |
 | CSRF | `SameSite=Lax` + Origin 헤더 검증 |
 
 ### 권한
@@ -269,45 +269,50 @@ export async function apiFetch(path: string, init?: RequestInit) {
 
 ### (2) Server Component는 쿠키를 설정할 수 없다
 
-access 토큰이 만료되어 Server Component에서 refresh를 시도해도, **`cookies().set()`은 Server Component에서 호출할 수 없다.** Next.js의 제약이다.
+access 토큰이 만료되어 Server Component에서 refresh를 시도해도, **일부 컨텍스트에서 `cookies().set()`이 제한될 수 있다.** Next.js 16에서는 refresh를 **Proxy가 아니라 DAL·Route Handler·Server Action**에서 처리한다.
 
-**미들웨어에서 갱신한다.**
+**실제 구현 (Next.js 16 `proxy.ts`)**
 
 ```ts
-// middleware.ts
-export async function middleware(request: NextRequest) {
-  const access = request.cookies.get('admin_session')
-  const refresh = request.cookies.get('admin_refresh')
+// proxy.ts — 쿠키 존재 여부만 확인 (refreshToken 있으면 통과)
+export async function proxy(request: NextRequest) {
+  const token = request.cookies.get("accessToken")
+  const refreshToken = request.cookies.get("refreshToken")
 
-  if (access) return NextResponse.next()
-
-  if (refresh) {
-    const res = await fetch(
-      `${process.env.API_INTERNAL_URL}/api/auth/jwt/refresh`,
-      { method: 'POST', headers: { cookie: `admin_refresh=${refresh.value}` } },
-    )
-    if (res.ok) {
-      const response = NextResponse.next()
-      res.headers.getSetCookie().forEach(c =>
-        response.headers.append('set-cookie', c),
-      )
-      return response
-    }
+  if (!token && !refreshToken && !isPublicPath(pathname)) {
+    return NextResponse.redirect(new URL("/login", request.url))
   }
-
-  return NextResponse.redirect(new URL('/login', request.url))
-}
-
-export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|login).*)'],
+  return NextResponse.next()
 }
 ```
 
-### 미들웨어에서 권한을 판정하지 않는다
+```ts
+// lib/permissions-server.ts — 세션 검증 + refresh (layout, BFF)
+async function fetchServerUserMe() {
+  let token = store.get("accessToken")?.value
+  if (!token) token = await refreshServerAccessToken(store)
 
-미들웨어는 **매 요청 실행**된다. 여기서 DB를 조회하면 전체 응답이 느려진다.
+  let res = await fetch(`${baseURL}/users/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (res.status === 401) {
+    token = await refreshServerAccessToken(store)
+    // ... retry once
+  }
+}
+```
 
-미들웨어는 **인증 여부만** 확인하고, 권한 판정은 FastAPI가 담당한다.
+- **Proxy**: public 경로 게이트 + 쿠키 없으면 `/login` (1차)
+- **DAL** (`requireServerUserMe`, `getAuthenticatedSession`): refresh 후 `/users/me` 재시도 (2차)
+- **BFF** (`assertServerPermission`): 권한 검사 (3차)
+
+> Next.js 16부터 `middleware.ts`는 [`proxy.ts`](https://nextjs.org/docs/messages/middleware-to-proxy)로 이름이 변경되었다. `export function middleware` → `export function proxy`.
+
+### Proxy에서 권한을 판정하지 않는다
+
+Proxy는 **매 요청 실행**된다. 여기서 DB를 조회하면 전체 응답이 느려진다.
+
+Proxy는 **인증 여부(쿠키 존재)만** 확인하고, 권한 판정은 FastAPI가 담당한다.
 
 ---
 
@@ -358,7 +363,7 @@ if "scheduler:manage" in user.permissions:
 
 ### 원칙 2 — 권한 판정의 정본은 백엔드다
 
-Next.js 미들웨어와 화면 요소 숨김은 **사용자 경험**을 위한 것이지 보안 장치가 아니다. 모든 권한 판정은 FastAPI가 수행한다.
+Next.js Proxy와 화면 요소 숨김은 **사용자 경험**을 위한 것이지 보안 장치가 아니다. 모든 권한 판정은 FastAPI가 수행한다.
 
 ### 원칙 3 — 거부를 기본값으로
 
@@ -805,7 +810,7 @@ MCP 구현 시 사용한다. 키의 유효 권한은 **사용자 권한과의 �
 | **1** | 스키마 생성 + 권한 · 역할 시드 + CLI 부트스트랩 명령 | `users.role` 이관 불필요 |
 | **2** | 백엔드 — `require()`, superuser 가드, `UserUpdate` 필드 제거, `/users/me`, 쿠키 인증, refresh 회전, 감사 로그 | dual-mode refresh 제외 |
 | **3** | `nextjs-frontend` → `nextjs-admin-frontend` **rename** + 사용자 코드 정리 | 분리 아님 |
-| **4** | 관리자 웹 권한 UX — 미들웨어, Forbidden 화면, 권한 기반 nav | |
+| **4** | 관리자 웹 권한 UX — `proxy.ts`, Forbidden 화면, 권한 기반 nav | |
 | **5** | (나중) 사용자 웹 · 모바일 · MCP 권한 | |
 
 ### Phase 3이 축소된 이유
@@ -910,8 +915,9 @@ http-request deny deny_status 403 if host_admin !admin_ip_ok
 
 - [ ] Server Component fetch 헬퍼 — 쿠키 명시 전달
 - [ ] 직접 `fetch` 호출 금지 규칙
-- [ ] 미들웨어에서 refresh 처리 (Server Component 아님)
-- [ ] 미들웨어는 인증 여부만, 권한 판정은 FastAPI
+- [ ] `proxy.ts` — 쿠키 존재 여부 게이트 (refreshToken 있으면 통과)
+- [ ] DAL(`permissions-server`)에서 refresh + `/users/me` 재시도
+- [ ] Proxy는 인증 여부만, 권한 판정은 FastAPI
 - [ ] 권한 배열 기반 UI 분기 (역할 아님)
 - [ ] 403 전용 화면 (로그인 리다이렉트 금지)
 
@@ -932,7 +938,7 @@ http-request deny deny_status 403 if host_admin !admin_ip_ok
 | access 토큰에 권한 담기 | 권한 회수가 만료까지 미반영 |
 | Server Component에서 쿠키 미전달 | 배포 후에만 인증 실패 |
 | Server Component에서 refresh 시도 | 쿠키 설정 불가로 무한 리다이렉트 |
-| 미들웨어에서 권한 판정 | 매 요청 DB 조회로 전체 지연 |
+| Proxy에서 권한 판정 | 매 요청 DB 조회로 전체 지연 |
 | `--forwarded-allow-ips="*"` | IP 위조로 감사 로그 오염 |
 | 개발만 HTTP | 운영에서만 발생하는 쿠키 버그 |
 | GET으로 상태 변경 | `SameSite=Lax` 방어 무력화 |

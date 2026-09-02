@@ -44,12 +44,12 @@ superuser로 로그인하면 사이드바 **관리자 → 스케줄 관리** (`/
 
 ## 새 job 추가
 
-1. `fastapi_backend/scheduler/jobs/my_job.py` — `run_job()` 패턴으로 구현
-2. `scheduler/queue_processor.py` — `KNOWN_JOB_KEYS` 및 `_run_job` 분기 추가
-3. `app/routes/admin_scheduler.py` — `REGISTERED_JOB_KEYS` 추가
-4. `scheduler/lock.py` — `LOCK_IDS`에 advisory lock ID 추가
-5. `nextjs-frontend/lib/scheduler-status.ts` — `REGISTERED_JOB_KEYS` 동기화
-6. (선택) Alembic migration으로 `scheduler_jobs` 시드
+1. `fastapi_backend/scheduler/jobs/my_job.py` — `JOB_KEY` 상수와 `run_*()` 함수 구현
+2. `scheduler/jobs/registry.py` — `_JOB_RUNNERS`에 job 등록 (단일 소스)
+3. `scheduler/lock.py` — `LOCK_IDS`에 advisory lock ID 추가
+4. (선택) Alembic migration으로 `scheduler_jobs` 시드
+
+Admin UI는 `GET /admin/scheduler/job-keys`로 등록 가능한 job_key 목록을 조회합니다.
 
 ## 샘플 job
 

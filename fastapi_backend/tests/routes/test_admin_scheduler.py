@@ -54,6 +54,33 @@ async def test_list_scheduler_jobs_for_operator(
 
 
 @pytest.mark.asyncio
+async def test_list_registered_job_keys(test_client, operator_headers):
+    res = await test_client.get("/admin/scheduler/job-keys", headers=operator_headers)
+    assert res.status_code == 200
+    assert res.json() == ["sample_heartbeat"]
+
+
+@pytest.mark.asyncio
+async def test_create_scheduler_job_rejects_unknown_job_key(
+    test_client, operator_headers
+):
+    res = await test_client.post(
+        "/admin/scheduler/jobs",
+        headers={**operator_headers, "Content-Type": "application/json"},
+        json={
+            "job_key": "unknown_job",
+            "title": "Bad",
+            "enabled": True,
+            "cron_hour": 3,
+            "cron_minute": 0,
+            "timezone": "Asia/Seoul",
+        },
+    )
+    assert res.status_code == 400
+    assert "job_key must be one of" in res.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_enqueue_run_now(test_client, db_session, operator_headers):
     job = SchedulerJob(
         job_key="sample_heartbeat",

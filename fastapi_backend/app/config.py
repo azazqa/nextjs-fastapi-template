@@ -26,6 +26,15 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_SECONDS: int = 3600
     REFRESH_TOKEN_EXPIRE_SECONDS: int = 24 * 3600
+    COOKIE_SECURE: bool = False
+
+    # Login rate limit (per login id): x sec window, y failures → z sec lockout
+    LOGIN_RATE_LIMIT_WINDOW_SECONDS: int = 300
+    LOGIN_RATE_LIMIT_MAX_FAILURES: int = 5
+    LOGIN_RATE_LIMIT_LOCKOUT_SECONDS: int = 60
+
+    # Redis (login rate limit across Gunicorn workers; unset → in-memory fallback)
+    REDIS_URL: str | None = None
 
     # Email
     MAIL_USERNAME: str | None = None

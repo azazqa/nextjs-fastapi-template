@@ -55,12 +55,7 @@ export type SchedulerQueuePage = {
   pages: number;
 };
 
-/** 코드에 등록된 job_key (백엔드 REGISTERED_JOB_KEYS와 동기) */
-export const REGISTERED_JOB_KEYS = ["sample_heartbeat"] as const;
-
-export type RegisteredJobKey = (typeof REGISTERED_JOB_KEYS)[number];
-
-/** Job 등록/수정 폼 (job_key는 API 문자열; 생성 시 REGISTERED_JOB_KEYS 중 선택) */
+/** Job 등록/수정 폼 (job_key는 API 문자열; 생성 시 GET /admin/scheduler/job-keys 목록에서 선택) */
 export type SchedulerJobFormState = {
   job_key: string;
   title: string;

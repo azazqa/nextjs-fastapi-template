@@ -2,10 +2,13 @@ services:
   backend:
     build:
       context: fastapi_backend
+    env_file:
+      - ./fastapi_backend/.env
     environment:
       - TZ=Asia/Seoul
-      - OPENAPI_OUTPUT_FILE=./shared-data/openapi.json
       - DATABASE_URL=postgresql+asyncpg://postgres:439e19e7328d37abb598d1603dbe9eca8abef29433544c1e@db:5432/app
+      - REDIS_URL=redis://redis:6379/0
+      - OPENAPI_OUTPUT_FILE=./shared-data/openapi.json
     ports:
       - "8000:8000"
     volumes:
@@ -14,6 +17,14 @@ services:
       - ./local-shared-data:/app/shared-data
     depends_on:
       - db
+      - redis
+  redis:
+    image: redis:8.2-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
   db:
     image: postgres:18.6-trixie
     environment:
@@ -61,3 +72,4 @@ services:
 volumes:
   postgres_data:
   postgres_test_data:
+  redis_data:

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi_pagination.ext.sqlalchemy import apaginate
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select, update
@@ -11,8 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.current_user import CurrentUser, require
 from app.database import get_async_session
+from app.exceptions import AppError, ConflictError, NotFoundError
 from app.models import SchedulerJob, SchedulerJobLog, SchedulerJobQueue
-from app.pagination import MAX_PAGE_SIZE, Page, Params
+from app.pagination import Page, Params
+from scheduler.jobs.registry import REGISTERED_JOB_KEYS
 
 router = APIRouter()
 
@@ -22,8 +24,6 @@ QUEUE_ACTION_SCHEDULED = "SCHEDULED"
 QUEUE_STATUS_PENDING = "PENDING"
 QUEUE_STATUS_PROCESSING = "PROCESSING"
 QUEUE_STATUS_CANCELLED = "CANCELLED"
-
-REGISTERED_JOB_KEYS = frozenset({"sample_heartbeat"})
 
 
 class SchedulerJobRead(BaseModel):
@@ -104,6 +104,13 @@ def _transform_logs(rows: list[SchedulerJobLog]) -> list[SchedulerJobLogRead]:
     return out
 
 
+@router.get("/job-keys", response_model=list[str])
+async def list_registered_job_keys(
+    _: CurrentUser = Depends(require("scheduler:read")),
+):
+    return sorted(REGISTERED_JOB_KEYS)
+
+
 @router.get("/jobs", response_model=list[SchedulerJobRead])
 async def list_scheduler_jobs(
     q: str | None = Query(default=None, description="job_key 또는 title 검색"),
@@ -128,9 +135,8 @@ async def create_scheduler_job(
     _: CurrentUser = Depends(require("scheduler:manage")),
 ):
     if body.job_key not in REGISTERED_JOB_KEYS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"job_key must be one of: {', '.join(sorted(REGISTERED_JOB_KEYS))}",
+        raise AppError(
+            f"job_key must be one of: {', '.join(sorted(REGISTERED_JOB_KEYS))}"
         )
     existing = await session.get(SchedulerJob, body.job_key)
     if existing is not None:
@@ -141,7 +147,7 @@ async def create_scheduler_job(
             await session.commit()
             await session.refresh(existing)
             return existing
-        raise HTTPException(status_code=409, detail="Job already exists")
+        raise ConflictError("Job already exists")
 
     row = SchedulerJob(**body.model_dump())
     session.add(row)
@@ -158,7 +164,7 @@ async def delete_scheduler_job(
 ):
     row = await session.get(SchedulerJob, job_key)
     if row is None or row.is_delete:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise NotFoundError("Job not found")
     row.is_delete = True
     await session.commit()
 
@@ -172,11 +178,11 @@ async def update_scheduler_job(
 ):
     row = await session.get(SchedulerJob, job_key)
     if row is None or row.is_delete:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise NotFoundError("Job not found")
 
     data = body.model_dump(exclude_unset=True)
     if not data:
-        raise HTTPException(status_code=400, detail="No fields to update")
+        raise AppError("No fields to update")
 
     for k, v in data.items():
         setattr(row, k, v)
@@ -193,7 +199,7 @@ async def enqueue_run_now(
 ):
     job = await session.get(SchedulerJob, job_key)
     if job is None or job.is_delete:
-        raise HTTPException(status_code=404, detail="Job definition not found")
+        raise NotFoundError("Job definition not found")
 
     q = SchedulerJobQueue(
         job_key=job_key,
@@ -209,19 +215,13 @@ async def enqueue_run_now(
 
 @router.get("/queue", response_model=Page[SchedulerJobQueueRead])
 async def list_job_queue(
-    page: int = 1,
-    size: int = 20,
+    params: Params = Depends(),
     status: str | None = Query(default=None),
     job_key: str | None = Query(default=None),
     q: str | None = Query(default=None, description="job_key 검색"),
     session: AsyncSession = Depends(get_async_session),
     _: CurrentUser = Depends(require("scheduler:read")),
 ):
-    if size < 1:
-        raise HTTPException(status_code=400, detail="size must be >= 1")
-    if size > MAX_PAGE_SIZE:
-        raise HTTPException(status_code=400, detail=f"size must be <= {MAX_PAGE_SIZE}")
-    params = Params(page=page, size=size)
     stmt = select(SchedulerJobQueue).where(SchedulerJobQueue.is_delete == False)  # noqa: E712
     if status:
         stmt = stmt.where(SchedulerJobQueue.status == status.strip().upper())
@@ -241,12 +241,9 @@ async def cancel_queue_item(
 ):
     row = await session.get(SchedulerJobQueue, queue_id)
     if row is None or row.is_delete:
-        raise HTTPException(status_code=404, detail="Queue item not found")
+        raise NotFoundError("Queue item not found")
     if row.status not in (QUEUE_STATUS_PENDING, QUEUE_STATUS_PROCESSING):
-        raise HTTPException(
-            status_code=400,
-            detail="Only PENDING or PROCESSING items can be cancelled",
-        )
+        raise AppError("Only PENDING or PROCESSING items can be cancelled")
     row.status = QUEUE_STATUS_CANCELLED
     row.finished_at = datetime.now(tz=timezone.utc)
     row.error_message = "Cancelled by operator"
@@ -257,18 +254,12 @@ async def cancel_queue_item(
 
 @router.get("/job-logs", response_model=Page[SchedulerJobLogRead])
 async def list_job_logs(
-    page: int = 1,
-    size: int = 20,
+    params: Params = Depends(),
     job_id: str | None = Query(default=None),
     status: str | None = Query(default=None),
     session: AsyncSession = Depends(get_async_session),
     _: CurrentUser = Depends(require("scheduler:read")),
 ):
-    if size < 1:
-        raise HTTPException(status_code=400, detail="size must be >= 1")
-    if size > MAX_PAGE_SIZE:
-        raise HTTPException(status_code=400, detail=f"size must be <= {MAX_PAGE_SIZE}")
-    params = Params(page=page, size=size)
     q = select(SchedulerJobLog).where(SchedulerJobLog.is_delete == False)  # noqa: E712
     if job_id and job_id.strip():
         q = q.where(SchedulerJobLog.job_id == job_id.strip())
@@ -287,24 +278,18 @@ async def clear_stuck_running_log_and_enqueue(
 ):
     log = await session.get(SchedulerJobLog, log_id)
     if log is None or log.is_delete:
-        raise HTTPException(status_code=404, detail="Log not found")
+        raise NotFoundError("Log not found")
     if log.status != "RUNNING" or log.finished_at is not None:
-        raise HTTPException(
-            status_code=400,
-            detail="Only unfinished RUNNING logs can be cleared this way",
-        )
+        raise AppError("Only unfinished RUNNING logs can be cleared this way")
 
     now = datetime.now(tz=timezone.utc)
     started = log.started_at
     if started.tzinfo is None:
         started = started.replace(tzinfo=timezone.utc)
     if (now - started).total_seconds() < float(min_age_seconds):
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"log is newer than min_age_seconds={min_age_seconds}; "
-                "wait or increase the threshold to avoid aborting a live run"
-            ),
+        raise AppError(
+            f"log is newer than min_age_seconds={min_age_seconds}; "
+            "wait or increase the threshold to avoid aborting a live run"
         )
 
     await session.execute(

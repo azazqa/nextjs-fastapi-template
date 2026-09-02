@@ -8,11 +8,9 @@ from sqlalchemy.orm import Session
 
 from app.models import SchedulerJobQueue
 from scheduler.db import build_scheduler_engine
-from scheduler.jobs.sample_heartbeat import run_sample_heartbeat
+from scheduler.jobs.registry import REGISTERED_JOB_KEYS, run_registered_job
 
 logger = logging.getLogger(__name__)
-
-KNOWN_JOB_KEYS = frozenset({"sample_heartbeat"})
 
 _PROCESSING_JOB_KEYS = (
     select(SchedulerJobQueue.job_key)
@@ -23,23 +21,6 @@ _PROCESSING_JOB_KEYS = (
     .distinct()
     .scalar_subquery()
 )
-
-
-def _run_job(job_key: str, *, engine, payload: dict | None = None) -> tuple[str, str | None]:
-    """
-    Returns (outcome, error_message).
-
-    outcome: succeeded | failed | lock_skipped
-    """
-    _ = payload
-    if job_key == "sample_heartbeat":
-        result = run_sample_heartbeat(engine=engine)
-        if result is None:
-            return "lock_skipped", None
-        if result.status == "SUCCESS":
-            return "succeeded", None
-        return "failed", result.error_message or "job failed"
-    return "failed", f"unknown job_key: {job_key}"
 
 
 def process_pending_queue(*, engine=None) -> None:
@@ -69,7 +50,7 @@ def process_pending_queue(*, engine=None) -> None:
             return
 
         job_key = row.job_key
-        if job_key not in KNOWN_JOB_KEYS:
+        if job_key not in REGISTERED_JOB_KEYS:
             session.execute(
                 update(SchedulerJobQueue)
                 .where(SchedulerJobQueue.id == qid)
@@ -105,7 +86,7 @@ def process_pending_queue(*, engine=None) -> None:
         row = session.get(SchedulerJobQueue, qid)
         payload = row.payload if row else None
 
-    outcome, err = _run_job(job_key, engine=engine, payload=payload)
+    outcome, err = run_registered_job(job_key, engine=engine, payload=payload)
 
     with Session(engine) as session:
         if (

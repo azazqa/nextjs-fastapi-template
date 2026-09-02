@@ -8,7 +8,6 @@ import { formatDateTimeInSeoul } from "@/lib/date-utils";
 import {
   canCancelQueue,
   QUEUE_STATUS_OPTIONS,
-  REGISTERED_JOB_KEYS,
   queueStatusLabel,
   type SchedulerJobFormState,
   type SchedulerJobRow,
@@ -73,15 +72,15 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-const emptyJobForm: SchedulerJobFormState = {
-  job_key: REGISTERED_JOB_KEYS[0] ?? "sample_heartbeat",
+const defaultJobForm = (jobKey = ""): SchedulerJobFormState => ({
+  job_key: jobKey,
   title: "",
   enabled: true,
   cron_hour: 3,
   cron_minute: 0,
   timezone: "Asia/Seoul",
   description: "",
-};
+});
 
 export default function AdminSchedulerPage() {
   const router = useRouter();
@@ -117,7 +116,8 @@ export default function AdminSchedulerPage() {
 
   const [jobDialogOpen, setJobDialogOpen] = useState(false);
   const [jobDialogMode, setJobDialogMode] = useState<"create" | "edit">("create");
-  const [jobForm, setJobForm] = useState<SchedulerJobFormState>(emptyJobForm);
+  const [jobForm, setJobForm] = useState<SchedulerJobFormState>(() => defaultJobForm());
+  const [registeredJobKeys, setRegisteredJobKeys] = useState<string[]>([]);
   const [editJobKey, setEditJobKey] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SchedulerJobRow | null>(null);
   const [busy, setBusy] = useState(false);
@@ -172,13 +172,26 @@ export default function AdminSchedulerPage() {
   }, [tab, loadJobs]);
 
   useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/admin/scheduler/job-keys", { cache: "no-store" });
+        if (!res.ok) return;
+        const keys = (await res.json()) as string[];
+        setRegisteredJobKeys(keys);
+      } catch {
+        /* ignore — create dialog falls back to empty list */
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
     if (tab === "queue") void loadQueue();
   }, [tab, loadQueue]);
 
   const openCreateJob = () => {
     setJobDialogMode("create");
     setEditJobKey(null);
-    setJobForm({ ...emptyJobForm });
+    setJobForm(defaultJobForm(registeredJobKeys[0] ?? ""));
     setJobDialogOpen(true);
   };
 
@@ -564,7 +577,7 @@ export default function AdminSchedulerPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {REGISTERED_JOB_KEYS.map((k) => (
+                      {registeredJobKeys.map((k) => (
                         <SelectItem key={k} value={k}>
                           {k}
                         </SelectItem>

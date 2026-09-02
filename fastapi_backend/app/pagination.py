@@ -10,7 +10,7 @@ MAX_PAGE_SIZE = 500
 
 
 class Params(_Params):
-    size: int = Query(50, ge=1, le=MAX_PAGE_SIZE, description="Page size")
+    size: int = Query(20, ge=1, le=MAX_PAGE_SIZE, description="Page size")
 
 
 class Page(_Page):

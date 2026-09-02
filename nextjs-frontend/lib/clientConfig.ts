@@ -1,5 +1,11 @@
 import { client } from "@/app/openapi-client/client.gen";
 
+import {
+  applyRefreshCookies,
+  clearAuthCookies,
+} from "@/lib/auth-cookies";
+import { readSetCookie } from "@/lib/parse-set-cookie";
+
 const configureClient = () => {
   const baseURL = process.env.API_BASE_URL;
 
@@ -21,54 +27,54 @@ const configureClient = () => {
             | (typeof error)["config"] & { _retry?: boolean }
             | undefined;
 
-          // refresh 실패/무한루프 방지
           if (!originalRequest || originalRequest._retry) {
-            cookieStore.delete("accessToken");
-            cookieStore.delete("refreshToken");
+            await clearAuthCookies(cookieStore);
             redirect("/login");
+            return Promise.reject(error);
           }
 
           const refreshToken = cookieStore.get("refreshToken")?.value;
           if (!refreshToken || !baseURL) {
-            cookieStore.delete("accessToken");
-            cookieStore.delete("refreshToken");
+            await clearAuthCookies(cookieStore);
             redirect("/login");
+            return Promise.reject(error);
           }
 
-          // Refresh로 access 재발급
           const refreshRes = await fetch(`${baseURL}/auth/jwt/refresh`, {
             method: "POST",
             headers: {
-              Cookie: `refreshToken=${refreshToken}`,
+              Cookie: `refreshToken=${encodeURIComponent(refreshToken)}`,
             },
             cache: "no-store",
           });
 
           if (!refreshRes.ok) {
-            cookieStore.delete("accessToken");
-            cookieStore.delete("refreshToken");
+            await clearAuthCookies(cookieStore);
             redirect("/login");
+            return Promise.reject(error);
           }
 
-          const json = (await refreshRes.json()) as { access_token: string };
-          cookieStore.set("accessToken", json.access_token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
-            maxAge: 3600,
-            path: "/",
+          const json = (await refreshRes.json()) as { access_token?: string };
+          const rotatedRefresh = readSetCookie(refreshRes.headers, "refreshToken");
+          const accessToken = await applyRefreshCookies(cookieStore, {
+            access_token: json.access_token,
+            refresh_token: rotatedRefresh,
           });
+          if (!accessToken) {
+            await clearAuthCookies(cookieStore);
+            redirect("/login");
+            return Promise.reject(error);
+          }
 
-          // Retry original request once with new access token
           originalRequest._retry = true;
           originalRequest.headers = {
             ...(originalRequest.headers ?? {}),
-            Authorization: `Bearer ${json.access_token}`,
+            Authorization: `Bearer ${accessToken}`,
           };
           return client.instance.request(originalRequest);
         }
         return Promise.reject(error);
-      }
+      },
     );
   }
 };

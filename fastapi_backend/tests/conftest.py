@@ -1,3 +1,8 @@
+import os
+
+# Tests use in-memory login rate limit (no Redis required).
+os.environ["REDIS_URL"] = ""
+
 from httpx import AsyncClient, ASGITransport
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine

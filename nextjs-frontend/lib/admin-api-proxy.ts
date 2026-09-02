@@ -1,10 +1,24 @@
 import { assertServerPermission } from "@/lib/permissions-server";
 
+/** Fixed BFF allowlist — not an open proxy; paths must match a route handler prefix. */
+const ALLOWED_BACKEND_PREFIXES = ["/admin/scheduler"] as const;
+
+function isAllowedBackendPath(path: string): boolean {
+  if (!path.startsWith("/") || path.includes("..")) return false;
+  return ALLOWED_BACKEND_PREFIXES.some(
+    (prefix) => path === prefix || path.startsWith(`${prefix}/`),
+  );
+}
+
 export async function proxyAdminRequest(
   request: Request,
   backendPath: string,
   permission: string,
 ): Promise<Response> {
+  if (!isAllowedBackendPath(backendPath)) {
+    return new Response("Forbidden backend path", { status: 403 });
+  }
+
   const auth = await assertServerPermission(permission);
   if (!auth.ok) {
     return new Response(auth.message, { status: auth.status });

@@ -2,11 +2,11 @@ import hashlib
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import HTTPException
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.exceptions import RefreshTokenError
 from app.models import RefreshToken
 
 
@@ -76,18 +76,18 @@ async def verify_refresh_token_row(
         select(RefreshToken).where(RefreshToken.token_hash == token_hash)
     )
     if row is None:
-        raise HTTPException(status_code=401, detail="Invalid refresh token")
+        raise RefreshTokenError("Invalid refresh token")
 
     now = datetime.now(timezone.utc)
     if row.revoked_at is not None:
         await revoke_all_user_refresh_tokens(session, row.user_id)
-        raise HTTPException(status_code=401, detail="Refresh token revoked")
+        raise RefreshTokenError("Refresh token revoked")
 
     expires_at = row.expires_at
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     if expires_at < now:
-        raise HTTPException(status_code=401, detail="Refresh token expired")
+        raise RefreshTokenError("Refresh token expired")
 
     return row
 

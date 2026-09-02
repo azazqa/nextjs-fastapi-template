@@ -1,68 +1,15 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
+import { clearAuthCookies, refreshServerAccessToken } from "@/lib/auth-cookies";
 import { hasPermission, type UserPermissions } from "@/lib/permissions";
 
 export type ServerUserMe = UserPermissions;
 export { hasPermission };
 
-type CookieStore = Awaited<ReturnType<typeof cookies>>;
+export type AuthenticatedSession = { me: ServerUserMe; token: string };
 
-const REFRESH_MAX_AGE = 24 * 3600;
-const ACCESS_MAX_AGE = 3600;
-
-async function applyRefreshCookies(
-  store: CookieStore,
-  data: { access_token?: string; refresh_token?: string },
-): Promise<string | null> {
-  if (!data.access_token) return null;
-
-  try {
-    store.set("accessToken", data.access_token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: ACCESS_MAX_AGE,
-      path: "/",
-    });
-    if (data.refresh_token) {
-      store.set("refreshToken", data.refresh_token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: REFRESH_MAX_AGE,
-        path: "/",
-      });
-    }
-  } catch {
-    // Route handler context may forbid set; token is still valid for this request.
-  }
-
-  return data.access_token;
-}
-
-async function refreshServerAccessToken(store: CookieStore): Promise<string | null> {
-  const refresh = store.get("refreshToken")?.value;
-  if (!refresh) return null;
-
-  const baseURL = process.env.API_BASE_URL;
-  if (!baseURL) return null;
-
-  try {
-    const res = await fetch(`${baseURL}/auth/jwt/refresh`, {
-      method: "POST",
-      headers: { Cookie: `refreshToken=${encodeURIComponent(refresh)}` },
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-
-    const data = (await res.json()) as { access_token?: string; refresh_token?: string };
-    return applyRefreshCookies(store, data);
-  } catch {
-    return null;
-  }
-}
-
-async function fetchServerUserMe(): Promise<{ me: ServerUserMe; token: string } | null> {
+async function fetchServerUserMe(): Promise<AuthenticatedSession | null> {
   const store = await cookies();
   let token = store.get("accessToken")?.value ?? null;
   if (!token) {
@@ -95,6 +42,31 @@ async function fetchServerUserMe(): Promise<{ me: ServerUserMe; token: string } 
   }
 }
 
+/** Route handlers and BFF: returns session with refresh retry, or null (401). */
+export async function getAuthenticatedSession(): Promise<AuthenticatedSession | null> {
+  return fetchServerUserMe();
+}
+
+/** Protected layouts: redirect to login when session cannot be established. */
+export async function requireServerUserMe(): Promise<ServerUserMe> {
+  const result = await fetchServerUserMe();
+  if (!result) {
+    await clearAuthCookies();
+    redirect("/login");
+  }
+  return result.me;
+}
+
+/** Server Actions: access token with refresh, or redirect to login. */
+export async function requireAccessToken(): Promise<string> {
+  const result = await fetchServerUserMe();
+  if (!result) {
+    await clearAuthCookies();
+    redirect("/login");
+  }
+  return result.token;
+}
+
 export async function getServerIsSuperuser(): Promise<boolean> {
   const result = await fetchServerUserMe();
   return Boolean(result?.me.is_superuser);
@@ -114,7 +86,8 @@ export async function getServerUserMe(): Promise<ServerUserMe | null> {
 export async function assertServerPermission(
   ...codes: string[]
 ): Promise<
-  { ok: true; token: string; me: ServerUserMe } | { ok: false; status: 401 | 403; message: string }
+  | { ok: true; token: string; me: ServerUserMe }
+  | { ok: false; status: 401 | 403; message: string }
 > {
   const result = await fetchServerUserMe();
   if (!result) {
