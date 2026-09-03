@@ -8,11 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.exceptions import RefreshTokenError
 from app.models import RefreshToken
-from app.services.refresh_token_cache import (
-    cache_valid_refresh,
-    invalidate_refresh_hash,
-    invalidate_user_refresh_cache,
-)
 
 
 def hash_refresh_token(token: str) -> str:
@@ -56,7 +51,6 @@ async def revoke_refresh_token(
         return
     row.revoked_at = datetime.now(timezone.utc)
     await session.commit()
-    await invalidate_refresh_hash(token_hash, user_id=row.user_id)
 
 
 async def revoke_all_user_refresh_tokens(
@@ -72,7 +66,6 @@ async def revoke_all_user_refresh_tokens(
         .values(revoked_at=now)
     )
     await session.commit()
-    await invalidate_user_refresh_cache(user_id)
 
 
 async def verify_refresh_token_row(
@@ -96,12 +89,6 @@ async def verify_refresh_token_row(
     if expires_at < now:
         raise RefreshTokenError("Refresh token expired")
 
-    await cache_valid_refresh(
-        token_hash,
-        user_id=row.user_id,
-        row_id=row.id,
-        expires_at=expires_at,
-    )
     return row
 
 
@@ -114,8 +101,6 @@ async def rotate_refresh_token(
     ip: str | None = None,
 ) -> None:
     now = datetime.now(timezone.utc)
-    old_hash = row.token_hash
-    user_id = row.user_id
     row.revoked_at = now
     expires_at = now + timedelta(seconds=int(settings.REFRESH_TOKEN_EXPIRE_SECONDS))
     new_hash = hash_refresh_token(new_raw_token)
@@ -130,10 +115,3 @@ async def rotate_refresh_token(
     session.add(new_row)
     await session.flush()
     await session.commit()
-    await invalidate_refresh_hash(old_hash, user_id=user_id)
-    await cache_valid_refresh(
-        new_hash,
-        user_id=user_id,
-        row_id=new_row.id,
-        expires_at=expires_at,
-    )

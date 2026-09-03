@@ -112,9 +112,8 @@ flowchart TB
 | JWT access (1h) + `jti` | `DenyListJWTStrategy` |
 | refresh (1d) + DB 해시·회전 | `auth_refresh.py`, `refresh_tokens` PG SSOT |
 | access denylist (logout) | Redis `access_deny:{jti}` |
-| refresh 검증 캐시 | Redis `refresh_ok:{hash}` (PG authoritative) |
 | 로그인 rate limit | `LOGIN_RATE_LIMIT_*` + Redis (multi-worker) |
-| RBAC 8 permissions | `app/rbac/`, Redis 캐시 + PG SSOT |
+| RBAC 8 permissions | `app/rbac/`, Redis 캐시 + PG SSOT (빈 권한 sentinel) |
 | `/users/me` roles/permissions | `get_current_user` read-through cache |
 | 회원가입 API | 미노출 (`/auth/register` 없음) |
 | `is_superuser` | lifespan 개수 감시 |
@@ -127,9 +126,9 @@ flowchart TB
 
 | 이벤트 | 동작 |
 |--------|------|
-| `grant-role` | `invalidate_user_rbac` |
+| `assign_role` / `revoke_role` (`rbac/service.py`) | `invalidate_user_rbac` |
+| `grant-role` CLI | `assign_role` 경유 |
 | `seed-rbac` | `invalidate_all_rbac` |
-| refresh rotate/revoke/reuse | refresh cache invalidate |
 
 **잔여 이슈**
 
@@ -158,13 +157,12 @@ docker compose run --rm backend python -m app.cli grant-role --email <email> --r
 | `app/services/login_rate_limit.py` | Redis / in-memory fallback |
 | `gunicorn.conf.py` | `GUNICORN_WORKERS` env, `UvicornWorker` |
 
-**Redis 4계층 (인증)**
+**Redis 3계층 (인증)**
 
 | 용도 | Key 패턴 | SSOT / fallback |
 |------|----------|-----------------|
 | 로그인 rate limit | (login_rate 모듈) | Redis 필수 시 in-memory (테스트) |
-| RBAC permissions | `user_perms:{uuid}`, `user_roles:{uuid}` | PG, Redis miss → PG |
-| refresh 검증 캐시 | `refresh_ok:{sha256}` | PG, rotate/revoke 시 invalidate |
+| RBAC permissions | `user_perms:{uuid}`, `user_roles:{uuid}` | PG, Redis miss → PG; 빈 권한도 sentinel 캐시 |
 | access denylist | `access_deny:{jti}` | logout 시 SET, Redis down → fail-open |
 
 **환경변수**
@@ -237,7 +235,7 @@ docker compose run --rm backend python -m app.cli grant-role --email <email> --r
 | 항목 | 상태 |
 |------|------|
 | `make test-backend` | 49 passed, 8 skipped |
-| Redis path 테스트 | permission_cache, access_denylist, refresh_token_cache, rate limit concurrent |
+| Redis path 테스트 | permission_cache, access_denylist, rate limit concurrent |
 | `db_test` Alembic | 미적용 |
 
 **skip:** `test_main.py` (register 미노출), `test_email.py` (fastapi-mail API)
@@ -267,4 +265,4 @@ docker compose run --rm backend python -m app.cli grant-role --email <email> --r
 | 테스트 | 양호 | — |
 | 운영 · 보안 | **주의** | S1·S7·S9·S10 |
 
-**한 줄 요약:** Redis 인증 4계층·compose healthcheck·시크릿 변수화·rate limit 원자화가 반영되었다. 운영 투입 전 **`seed-rbac` + `grant-role`**, **포트·OpenAPI**, **노출된 DB 비밀번호 교체**가 필요하다.
+**한 줄 요약:** Redis 인증 3계층(rate limit, RBAC 캐시, access denylist)·compose healthcheck·시크릿 변수화가 반영되었다. 운영 투입 전 **`seed-rbac` + `grant-role`**, **포트·OpenAPI**, **노출된 DB 비밀번호 교체**가 필요하다.

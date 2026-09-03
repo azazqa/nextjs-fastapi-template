@@ -3,9 +3,9 @@ import asyncio
 from sqlalchemy import select
 
 from app.database import async_session_maker
-from app.models import Role, User, UserRole
-from app.rbac.permission_cache import invalidate_user_rbac
+from app.models import User
 from app.rbac.seed import seed_rbac
+from app.rbac.service import assign_role
 
 
 async def grant_role(*, email: str, role_code: str) -> None:
@@ -16,24 +16,17 @@ async def grant_role(*, email: str, role_code: str) -> None:
         if user is None:
             raise SystemExit(f"User not found: {email}")
 
-        role = await session.scalar(select(Role).where(Role.code == role_code))
-        if role is None:
-            raise SystemExit(f"Role not found: {role_code}")
-
-        existing = await session.scalar(
-            select(UserRole).where(
-                UserRole.user_id == user.id,
-                UserRole.role_id == role.id,
+        try:
+            granted = await assign_role(
+                session, user_id=user.id, role_code=role_code
             )
-        )
-        if existing is None:
-            session.add(UserRole(user_id=user.id, role_id=role.id))
-            await session.commit()
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
+
+        if granted:
             print(f"Granted role '{role_code}' to {email}")
         else:
             print(f"User {email} already has role '{role_code}'")
-
-    await invalidate_user_rbac(user.id)
 
 
 if __name__ == "__main__":

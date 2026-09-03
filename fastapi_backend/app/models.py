@@ -84,6 +84,13 @@ class RolePermission(Base):
 
 
 class UserRole(Base):
+    """사용자-역할 매핑.
+
+    직접 조작하지 말 것. 반드시 app.rbac.service 의
+    assign_role() / revoke_role() 을 사용한다.
+    (캐시 무효화가 함께 수행되어야 한다)
+    """
+
     __tablename__ = "user_roles"
 
     user_id: Mapped[uuid.UUID] = mapped_column(

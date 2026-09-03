@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 _PERMS_PREFIX = "user_perms:"
 _ROLES_PREFIX = "user_roles:"
+# Permission codes are "<resource>:<action>"; this sentinel cannot collide.
+_EMPTY_MARKER = "__none__"
 
 
 def _perms_key(user_id: uuid.UUID) -> str:
@@ -29,15 +31,20 @@ async def get_cached_rbac(
     if redis is None:
         return None
     try:
-        perms_raw, roles_raw = await redis.smembers(_perms_key(user_id)), await redis.smembers(
-            _roles_key(user_id)
-        )
-        if not perms_raw and not roles_raw:
-            return None
-        return frozenset(perms_raw), tuple(sorted(roles_raw))
+        pipe = redis.pipeline()
+        pipe.smembers(_perms_key(user_id))
+        pipe.smembers(_roles_key(user_id))
+        perms_raw, roles_raw = await pipe.execute()
     except Exception:
         logger.warning("RBAC cache read failed for user %s", user_id, exc_info=True)
         return None
+
+    if not perms_raw and not roles_raw:
+        return None
+
+    permissions = frozenset(p for p in perms_raw if p != _EMPTY_MARKER)
+    roles = tuple(sorted(r for r in roles_raw if r != _EMPTY_MARKER))
+    return permissions, roles
 
 
 async def set_cached_rbac(
@@ -53,13 +60,10 @@ async def set_cached_rbac(
     try:
         pipe = redis.pipeline()
         pipe.delete(pk, rk)
-        if permissions:
-            pipe.sadd(pk, *sorted(permissions))
-        if roles:
-            pipe.sadd(rk, *sorted(roles))
-        if permissions or roles:
-            pipe.expire(pk, ttl)
-            pipe.expire(rk, ttl)
+        pipe.sadd(pk, *(sorted(permissions) or [_EMPTY_MARKER]))
+        pipe.sadd(rk, *(sorted(roles) or [_EMPTY_MARKER]))
+        pipe.expire(pk, ttl)
+        pipe.expire(rk, ttl)
         await pipe.execute()
     except Exception:
         logger.warning("RBAC cache write failed for user %s", user_id, exc_info=True)
