@@ -34,6 +34,7 @@ dev = [
     "coveralls>=4.0.1,<5",
     "alembic>=1.14.0,<2",
     "pytest-asyncio>=1.4.0,<2",
+    "fakeredis[lua]>=2.26.0,<3",
     "mkdocs-material>=9.6.9",
     "mkdocs-material[imaging]>=9.6.9",
 ]

@@ -118,12 +118,33 @@ async def test_logout_revokes_refresh_token(test_client, authenticated_user):
         cookies={"refreshToken": refresh_token},
     )
     assert logout.status_code == 200
+    set_cookie = logout.headers.get("set-cookie", "")
+    assert "refreshToken=" in set_cookie
+    assert "Max-Age=0" in set_cookie or 'refreshToken=""' in set_cookie
 
     refresh = await test_client.post(
         "/auth/jwt/refresh",
         cookies={"refreshToken": refresh_token},
     )
     assert refresh.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_logout_clears_refresh_cookie(test_client, authenticated_user):
+    issue = await test_client.post(
+        "/auth/jwt/refresh-token",
+        headers=authenticated_user["headers"],
+    )
+    refresh_token = _refresh_cookie(issue)
+
+    logout = await test_client.post(
+        "/auth/jwt/logout",
+        cookies={"refreshToken": refresh_token},
+    )
+    assert logout.status_code == 200
+    set_cookie = "; ".join(logout.headers.get_list("set-cookie"))
+    assert "refreshToken" in set_cookie
+    assert "max-age=0" in set_cookie.lower()
 
 
 @pytest.mark.asyncio
@@ -149,6 +170,17 @@ async def test_refreshed_access_token_works_for_users_me(
     )
     assert me.status_code == 200
     assert me.json()["email"] == authenticated_user["user"].email
+
+
+@pytest.mark.asyncio
+async def test_logout_denies_access_token(test_client, authenticated_user, fake_redis):
+    headers = authenticated_user["headers"]
+    assert (await test_client.get("/users/me", headers=headers)).status_code == 200
+
+    logout = await test_client.post("/auth/jwt/logout", headers=headers)
+    assert logout.status_code == 200
+
+    assert (await test_client.get("/users/me", headers=headers)).status_code == 401
 
 
 @pytest.mark.asyncio

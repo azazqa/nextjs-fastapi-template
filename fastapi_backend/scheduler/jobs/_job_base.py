@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -29,28 +30,25 @@ class JobResult:
         return (self.finished_at - self.started_at).total_seconds()
 
 
-def _insert_job_log(db, job_id: str) -> int:
-    res = db.execute(
+def _insert_job_log(db, job_id: str) -> uuid.UUID:
+    log_id = uuid.uuid7()
+    db.execute(
         text(
             """
-            INSERT INTO scheduler_job_log(job_id, started_at, status)
-            VALUES (:job_id, NOW(), 'RUNNING')
-            RETURNING id
+            INSERT INTO scheduler_job_log(id, job_id, started_at, status)
+            VALUES (:id, :job_id, NOW(), 'RUNNING')
             """
         ),
-        {"job_id": job_id},
+        {"id": log_id, "job_id": job_id},
     )
-    log_id = res.scalar()
-    if log_id is None:
-        raise RuntimeError("failed to create scheduler_job_log row (no id returned)")
     db.commit()
-    return int(log_id)
+    return log_id
 
 
 def _finalize_job_log(
     db,
     *,
-    log_id: int,
+    log_id: uuid.UUID,
     status: str,
     elapsed_sec: float,
     error_message: str | None,

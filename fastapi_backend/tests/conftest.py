@@ -3,13 +3,16 @@ import os
 # Tests use in-memory login rate limit (no Redis required).
 os.environ["REDIS_URL"] = ""
 
-from httpx import AsyncClient, ASGITransport
 import pytest_asyncio
+from httpx import AsyncClient, ASGITransport
+import pytest
+from fakeredis.aioredis import FakeRedis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from fastapi_users.db import SQLAlchemyUserDatabase
 from fastapi_users.password import PasswordHelper
 import uuid
 
+import app.redis as redis_module
 from app.config import settings
 from app.models import Role, User, UserRole, Base
 
@@ -19,6 +22,17 @@ from app.database import get_user_db, get_async_session
 from app.main import app
 from app.rbac.seed import seed_rbac
 from app.users import get_jwt_strategy
+
+
+@pytest_asyncio.fixture
+async def fake_redis(monkeypatch):
+    """In-memory Redis for auth cache / denylist unit tests."""
+    client = FakeRedis(decode_responses=True)
+    monkeypatch.setattr(redis_module, "_redis", client)
+    monkeypatch.setattr(settings, "REDIS_URL", "redis://fake/0")
+    yield client
+    await client.aclose()
+    redis_module._redis = None
 
 
 @pytest_asyncio.fixture(scope="function", loop_scope="function")

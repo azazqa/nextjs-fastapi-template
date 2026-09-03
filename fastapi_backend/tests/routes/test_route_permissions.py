@@ -78,3 +78,19 @@ def test_non_public_routes_have_auth():
             continue
         missing.append(f"{','.join(route.methods)} {route.path}")
     assert not missing, f"Routes missing auth dependency: {missing}"
+
+
+def test_no_duplicate_route_paths():
+    """같은 (method, path)가 두 번 등록되지 않아야 한다 (H1 회귀 방지)."""
+    seen: set[tuple[str, str]] = set()
+    duplicates: list[str] = []
+    for route in app.routes:
+        if not isinstance(route, APIRoute):
+            continue
+        for method in route.methods:
+            entry = (method, route.path)
+            if entry in seen:
+                duplicates.append(f"{method} {route.path}")
+            seen.add(entry)
+
+    assert not duplicates, f"중복 등록된 라우트: {duplicates}"

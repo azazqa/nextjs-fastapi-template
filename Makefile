@@ -5,11 +5,21 @@ BACKEND_DIR=fastapi_backend
 FRONTEND_DIR=nextjs-frontend
 DOCKER_COMPOSE=docker compose
 
+# Load root .env for compose-related make targets (optional if missing)
+ifneq (,$(wildcard .env))
+include .env
+export
+endif
+
 # Help
 .PHONY: help
 help:
 	@echo "Available commands:"
 	@awk '/^[a-zA-Z_-]+:/{split($$1, target, ":"); print "  " target[1] "\t" substr($$0, index($$0,$$2))}' $(MAKEFILE_LIST)
+
+.PHONY: init
+init: ## Create root and backend .env from examples (prompt before overwrite)
+	@bash scripts/init-env.sh
 
 # Backend commands
 .PHONY: start-backend test-backend
@@ -65,8 +75,8 @@ docker-start-scheduler: ## Start the scheduler container
 docker-logs-scheduler: ## Follow scheduler container logs
 	$(DOCKER_COMPOSE) logs -f scheduler
 
-docker-up-test-db: ## Start the test database container
-	$(DOCKER_COMPOSE) up -d db_test
+docker-up-test-db: ## Start a fresh test database (no persistent volume)
+	$(DOCKER_COMPOSE) up -d --force-recreate --wait db_test
 
 docker-migrate-db: ## Run database migrations using Alembic
 	$(DOCKER_COMPOSE) run --rm backend alembic upgrade head
@@ -74,10 +84,10 @@ docker-migrate-db: ## Run database migrations using Alembic
 docker-db-schema: ## Generate a new migration schema. Usage: make docker-db-schema migration_name="add users"
 	$(DOCKER_COMPOSE) run --rm backend alembic revision --autogenerate -m "$(migration_name)"
 
-docker-test-backend: ## Run tests for the backend
-	$(DOCKER_COMPOSE) up -d db_test
+docker-test-backend: ## Run tests for the backend against a fresh db_test
+	$(MAKE) docker-up-test-db
 	$(DOCKER_COMPOSE) run --rm \
-	  -e TEST_DATABASE_URL=postgresql+asyncpg://postgres:439e19e7328d37abb598d1603dbe9eca8abef29433544c1e@db_test:5432/app \
+	  -e TEST_DATABASE_URL=postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_TEST_PASSWORD)@db_test:5432/$(POSTGRES_DB)_test \
 	  backend pytest
 
 docker-test-frontend: ## Run tests for the frontend

@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if settings.REQUIRE_REDIS and not settings.REDIS_URL:
+        raise RuntimeError("REQUIRE_REDIS=true인데 REDIS_URL이 설정되지 않았습니다")
     async with async_session_maker() as session:
         count = await session.scalar(
             select(func.count()).select_from(User).where(User.is_superuser.is_(True))

@@ -1,12 +1,14 @@
 import asyncio
 
 from app.database import async_session_maker
+from app.rbac.permission_cache import invalidate_all_rbac
 from app.rbac.seed import seed_rbac
 
 
 async def seed_rbac_cmd() -> None:
     async with async_session_maker() as session:
         await seed_rbac(session)
+    await invalidate_all_rbac()
     print("RBAC seed completed.")
 
 

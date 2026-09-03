@@ -4,7 +4,6 @@ from datetime import datetime
 from fastapi_users.db import SQLAlchemyBaseUserTableUUID
 from fastapi_users_db_sqlalchemy.generics import GUID
 from sqlalchemy import (
-    BigInteger,
     Boolean,
     DateTime,
     ForeignKey,
@@ -193,7 +192,9 @@ class SchedulerJobLog(Base):
 
     __tablename__ = "scheduler_job_log"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid7
+    )
     job_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -243,7 +244,9 @@ class SchedulerJobQueue(Base):
 
     __tablename__ = "scheduler_job_queue"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid7
+    )
     job_key: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     action: Mapped[str] = mapped_column(String(20), nullable=False)
     status: Mapped[str] = mapped_column(
@@ -254,7 +257,11 @@ class SchedulerJobQueue(Base):
         PG_UUID(as_uuid=True), ForeignKey("user.id"), nullable=True, index=True
     )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    related_log_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    related_log_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("scheduler_job_log.id"),
+        nullable=True,
+    )
     started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

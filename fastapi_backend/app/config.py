@@ -35,6 +35,8 @@ class Settings(BaseSettings):
 
     # Redis (login rate limit across Gunicorn workers; unset → in-memory fallback)
     REDIS_URL: str | None = None
+    REQUIRE_REDIS: bool = False
+    PERMISSION_CACHE_TTL_SECONDS: int = 300
 
     # Email
     MAIL_USERNAME: str | None = None

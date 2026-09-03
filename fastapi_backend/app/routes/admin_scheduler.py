@@ -60,13 +60,13 @@ class SchedulerJobUpdate(BaseModel):
 class SchedulerJobQueueRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: UUID
     job_key: str
     action: str
     status: str
     payload: dict | list | None = None
     requested_by_user_id: UUID | None
-    related_log_id: int | None
+    related_log_id: UUID | None
     error_message: str | None
     created_at: datetime
     started_at: datetime | None
@@ -76,7 +76,7 @@ class SchedulerJobQueueRead(BaseModel):
 class SchedulerJobLogRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: UUID
     job_id: str
     started_at: datetime
     finished_at: datetime | None
@@ -235,7 +235,7 @@ async def list_job_queue(
 
 @router.post("/queue/{queue_id}/cancel", response_model=SchedulerJobQueueRead)
 async def cancel_queue_item(
-    queue_id: int,
+    queue_id: UUID,
     session: AsyncSession = Depends(get_async_session),
     _: CurrentUser = Depends(require("scheduler:manage")),
 ):
@@ -271,7 +271,7 @@ async def list_job_logs(
 
 @router.post("/job-logs/{log_id}/clear-stuck-and-enqueue", response_model=SchedulerJobQueueRead)
 async def clear_stuck_running_log_and_enqueue(
-    log_id: int,
+    log_id: UUID,
     min_age_seconds: int = Query(default=90, ge=5, le=86400),
     session: AsyncSession = Depends(get_async_session),
     user: CurrentUser = Depends(require("scheduler:manage")),

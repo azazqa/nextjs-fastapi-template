@@ -29,18 +29,18 @@ You can manually execute the same commands that the hot reloads call when they d
    ```
 
 ### Testing
-To run the tests, you need to run the test database container:
+To run the tests, start a **fresh** test database (ephemeral — no persistent volume; `--force-recreate` on each `make docker-up-test-db`):
    ```bash
    make docker-up-test-db
    ```
 
-Then run the tests locally:
+Then run the tests locally (`TEST_DATABASE_URL` must match compose: `app_test` + `POSTGRES_TEST_PASSWORD`):
    ```bash
    make test-backend
    make test-frontend
    ```
 
-Or using Docker:
+Or using Docker (also recreates `db_test` first):
    ```bash
    make docker-test-backend
    make docker-test-frontend

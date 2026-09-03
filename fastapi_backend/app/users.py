@@ -14,8 +14,9 @@ from fastapi_users import (
 from fastapi_users.authentication import (
     AuthenticationBackend,
     BearerTransport,
-    JWTStrategy,
 )
+
+from .auth.jwt_strategy import DenyListJWTStrategy
 from fastapi_users.db import SQLAlchemyUserDatabase
 
 from .config import settings
@@ -65,8 +66,8 @@ async def get_user_manager(user_db: SQLAlchemyUserDatabase = Depends(get_user_db
 bearer_transport = BearerTransport(tokenUrl=f"{AUTH_URL_PATH}/jwt/login")
 
 
-def get_jwt_strategy() -> JWTStrategy:
-    return JWTStrategy(
+def get_jwt_strategy() -> DenyListJWTStrategy:
+    return DenyListJWTStrategy(
         secret=settings.ACCESS_SECRET_KEY,
         lifetime_seconds=settings.ACCESS_TOKEN_EXPIRE_SECONDS,
     )

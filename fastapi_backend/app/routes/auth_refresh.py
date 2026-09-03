@@ -18,7 +18,8 @@ from app.services.refresh_tokens import (
     rotate_refresh_token,
     verify_refresh_token_row,
 )
-from app.users import current_active_user, get_jwt_strategy
+from app.users import current_active_user, get_jwt_strategy, get_user_manager
+from fastapi_users import BaseUserManager
 
 
 router = APIRouter(tags=["auth"])
@@ -129,9 +130,27 @@ async def refresh_access_token(
 async def logout_refresh_token(
     request: Request,
     db: AsyncSession = Depends(get_async_session),
+    user_manager: BaseUserManager[User, uuid.UUID] = Depends(get_user_manager),
 ):
-    """Revoke refresh token stored in the refreshToken cookie."""
+    """Revoke refresh cookie, clear cookie, and deny access JWT when Bearer is sent."""
+    auth = request.headers.get("Authorization")
+    if auth and auth.lower().startswith("bearer "):
+        token = auth.split(" ", 1)[1]
+        strategy = get_jwt_strategy()
+        user = await strategy.read_token(token, user_manager)
+        if user is not None:
+            await strategy.destroy_token(token, user)
+
     refresh_token = request.cookies.get(REFRESH_COOKIE_NAME)
     if refresh_token:
         await revoke_refresh_token(db, refresh_token)
-    return {"detail": "Logged out"}
+
+    response = JSONResponse(content={"detail": "Logged out"})
+    response.delete_cookie(
+        REFRESH_COOKIE_NAME,
+        path="/",
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite="lax",
+    )
+    return response

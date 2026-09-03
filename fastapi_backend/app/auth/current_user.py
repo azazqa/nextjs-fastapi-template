@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit import log_superuser_bypass
 from app.database import get_async_session
 from app.models import User
+from app.rbac.permission_cache import get_cached_rbac, set_cached_rbac
 from app.rbac.queries import fetch_user_permissions, fetch_user_roles
 from app.users import current_active_user
 
@@ -34,16 +35,22 @@ async def get_current_user(
     user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_async_session),
 ) -> CurrentUser:
-    permissions = await fetch_user_permissions(session, user.id)
-    roles = await fetch_user_roles(session, user.id)
+    cached = await get_cached_rbac(user.id)
+    if cached is not None:
+        permissions, roles = cached
+    else:
+        permissions = frozenset(await fetch_user_permissions(session, user.id))
+        roles = tuple(await fetch_user_roles(session, user.id))
+        await set_cached_rbac(user.id, permissions, roles)
+
     return CurrentUser(
         id=user.id,
         email=user.email,
         is_active=user.is_active,
         is_superuser=user.is_superuser,
         is_verified=user.is_verified,
-        permissions=frozenset(permissions),
-        roles=tuple(roles),
+        permissions=permissions,
+        roles=roles,
     )
 
 

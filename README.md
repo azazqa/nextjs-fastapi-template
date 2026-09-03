@@ -55,7 +55,8 @@ This is a partial list of the technologies included in the template. For a compl
 
 ## Get Started
 
-To use this template, visit our [Get Started](https://vintasoftware.github.io/nextjs-fastapi-template/get-started/) and follow the steps.
+1. Copy env files and generate secrets: `make init` (root `.env` is required for Docker Compose).
+2. Follow [Get Started](https://vintasoftware.github.io/nextjs-fastapi-template/get-started/) for the remaining steps.
 
 ## Using the template? Let's talk!
 
@@ -69,9 +70,9 @@ This project is maintained by [Vinta Software](https://www.vinta.com.br/) and is
 
 *Disclaimer: This project is not affiliated with Vercel.*
 
-
 ## deploy
 - git clone
+- `make init` (create root + backend `.env`)
 - docker compose build --no-cache
 - docker compose up -d --build --remove-orphans
 - docker compose run --rm backend alembic upgrade head

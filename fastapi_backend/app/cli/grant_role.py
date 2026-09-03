@@ -4,6 +4,7 @@ from sqlalchemy import select
 
 from app.database import async_session_maker
 from app.models import Role, User, UserRole
+from app.rbac.permission_cache import invalidate_user_rbac
 from app.rbac.seed import seed_rbac
 
 
@@ -31,6 +32,8 @@ async def grant_role(*, email: str, role_code: str) -> None:
             print(f"Granted role '{role_code}' to {email}")
         else:
             print(f"User {email} already has role '{role_code}'")
+
+    await invalidate_user_rbac(user.id)
 
 
 if __name__ == "__main__":
