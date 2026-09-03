@@ -50,6 +50,7 @@ async def revoke_role(
             UserRole.user_id == user_id, UserRole.role_id == role.id
         )
     )
+    removed = result.rowcount > 0
     await session.commit()
     await invalidate_user_rbac(user_id)
-    return result.rowcount > 0
+    return removed
