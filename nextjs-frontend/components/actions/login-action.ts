@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 
 import { authJwtLogin } from "@/app/clientService";
 import { redirect } from "next/navigation";
+import { setAccessCookie, setRefreshCookie } from "@/lib/auth-cookies";
 import { loginSchema } from "@/lib/definitions";
 import { readSetCookie } from "@/lib/parse-set-cookie";
 import { getErrorMessage } from "@/lib/utils";
@@ -35,13 +36,7 @@ export async function login(prevState: unknown, formData: FormData) {
       return { server_validation_error: getErrorMessage(error) };
     }
     const cookieStore = await cookies();
-    cookieStore.set("accessToken", data.access_token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 3600, // 1h; align with backend ACCESS_TOKEN_EXPIRE_SECONDS
-      path: "/",
-    });
+    setAccessCookie(cookieStore, data.access_token);
 
     const baseURL = process.env.API_BASE_URL;
     if (!baseURL) {
@@ -61,13 +56,7 @@ export async function login(prevState: unknown, formData: FormData) {
     if (!refreshToken) {
       return { server_error: "Refresh token cookie was not returned." };
     }
-    cookieStore.set("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 24 * 3600, // 1d; align with backend REFRESH_TOKEN_EXPIRE_SECONDS
-      path: "/",
-    });
+    setRefreshCookie(cookieStore, refreshToken);
   } catch (err) {
     console.error("Login error:", err);
     return {

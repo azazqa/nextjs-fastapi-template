@@ -21,12 +21,13 @@ describe("login action", () => {
 
   beforeEach(() => {
     process.env.API_BASE_URL = "http://localhost:8000";
-    global.fetch = jest
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ refresh_token: "refresh-token" }),
-      }) as unknown as typeof fetch;
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      headers: {
+        getSetCookie: () => ["refreshToken=refresh-token; Path=/; HttpOnly"],
+      },
+      json: async () => ({}),
+    }) as unknown as typeof fetch;
   });
 
   afterEach(() => {

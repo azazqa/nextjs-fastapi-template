@@ -2,26 +2,61 @@ import { cookies } from "next/headers";
 
 import { readSetCookie } from "@/lib/parse-set-cookie";
 
-export const REFRESH_MAX_AGE = 24 * 3600;
-export const ACCESS_MAX_AGE = 3600;
-
 type CookieStore = Awaited<ReturnType<typeof cookies>>;
 
-const cookieOptions = {
+/** JWT 파싱 실패 시에만 사용하는 폴백 값. 정상 경로에서는 토큰의 exp 를 따른다. */
+export const ACCESS_MAX_AGE_FALLBACK = 3600;
+export const REFRESH_MAX_AGE_FALLBACK = 24 * 3600;
+
+/** 모든 인증 쿠키의 단일 속성 정의. 쿠키 속성 변경은 이 객체만 수정한다. */
+export const cookieOptions = {
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
   sameSite: "lax" as const,
   path: "/",
 };
 
+/**
+ * JWT 의 exp 로 쿠키 수명을 계산한다.
+ * 서명은 검증하지 않는다 — 만료 시각 힌트로만 쓰이며 인증 판단은 백엔드가 한다.
+ */
+function maxAgeFromJwt(token: string, fallback: number): number {
+  try {
+    const segment = token.split(".")[1];
+    if (!segment) return fallback;
+    const payload = JSON.parse(
+      Buffer.from(segment, "base64url").toString("utf8"),
+    );
+    const ttl = Number(payload.exp) - Math.floor(Date.now() / 1000);
+    return Number.isFinite(ttl) && ttl > 0 ? Math.floor(ttl) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function setAccessCookie(store: CookieStore, token: string): void {
+  store.set("accessToken", token, {
+    ...cookieOptions,
+    maxAge: maxAgeFromJwt(token, ACCESS_MAX_AGE_FALLBACK),
+  });
+}
+
+export function setRefreshCookie(store: CookieStore, token: string): void {
+  store.set("refreshToken", token, {
+    ...cookieOptions,
+    maxAge: maxAgeFromJwt(token, REFRESH_MAX_AGE_FALLBACK),
+  });
+}
+
 export async function clearAuthCookies(store?: CookieStore): Promise<void> {
   const cookieStore = store ?? (await cookies());
-  try {
-    cookieStore.delete("accessToken");
-  } catch {}
-  try {
-    cookieStore.delete("refreshToken");
-  } catch {}
+  for (const name of ["accessToken", "refreshToken"]) {
+    try {
+      cookieStore.delete(name);
+    } catch {
+      // Route handler 컨텍스트에서 삭제가 금지될 수 있다
+    }
+  }
 }
 
 export async function applyRefreshCookies(
@@ -31,18 +66,13 @@ export async function applyRefreshCookies(
   if (!data.access_token) return null;
 
   try {
-    store.set("accessToken", data.access_token, {
-      ...cookieOptions,
-      maxAge: ACCESS_MAX_AGE,
-    });
+    setAccessCookie(store, data.access_token);
     if (data.refresh_token) {
-      store.set("refreshToken", data.refresh_token, {
-        ...cookieOptions,
-        maxAge: REFRESH_MAX_AGE,
-      });
+      setRefreshCookie(store, data.refresh_token);
     }
   } catch {
-    // Route handler context may forbid set; token is still valid for this request.
+    // Route handler 컨텍스트에서는 set 이 금지될 수 있다.
+    // 이번 요청에 한해 토큰은 여전히 유효하므로 값은 반환한다.
   }
 
   return data.access_token;
