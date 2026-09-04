@@ -8,7 +8,6 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
-    Integer,
     Numeric,
     String,
     Text,
@@ -194,6 +193,32 @@ class ApiKey(Base):
     )
 
 
+class SchedulerSchedule(Base):
+    """운영자가 만드는 스케줄. 하나의 job_key 위에 N개가 존재할 수 있다."""
+
+    __tablename__ = "scheduler_schedules"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid7
+    )
+    job_key: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    cron_expression: Mapped[str] = mapped_column(String(120), nullable=False)
+    timezone: Mapped[str] = mapped_column(
+        String(64), nullable=False, server_default="Asia/Seoul"
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true"
+    )
+    payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    concurrency_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("ix_scheduler_schedules_enabled", "job_key", "enabled"),
+    )
+
+
 class SchedulerJobLog(Base):
     """스케줄러 잡 실행 이력 테이블."""
 
@@ -202,7 +227,19 @@ class SchedulerJobLog(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid7
     )
-    job_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    job_key: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    queue_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("scheduler_job_queue.id", use_alter=True, name="fk_scheduler_job_log_queue_id"),
+        nullable=True,
+        index=True,
+    )
+    schedule_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("scheduler_schedules.id"),
+        nullable=True,
+        index=True,
+    )
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -220,30 +257,8 @@ class SchedulerJobLog(Base):
     detail: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     __table_args__ = (
-        Index("ix_scheduler_job_log_job_id_started_at", "job_id", "started_at"),
+        Index("ix_scheduler_job_log_job_key_started_at", "job_key", "started_at"),
     )
-
-
-class SchedulerJob(Base):
-    """스케줄러 잡 정의(메타데이터). runner는 기동 시 이 테이블을 읽어 CronTrigger를 구성한다."""
-
-    __tablename__ = "scheduler_jobs"
-
-    job_key: Mapped[str] = mapped_column(String(100), primary_key=True)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default="true"
-    )
-    cron_hour: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=3, server_default="3"
-    )
-    cron_minute: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, server_default="0"
-    )
-    timezone: Mapped[str] = mapped_column(
-        String(64), nullable=False, default="Asia/Seoul", server_default="Asia/Seoul"
-    )
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class SchedulerJobQueue(Base):
@@ -255,6 +270,12 @@ class SchedulerJobQueue(Base):
         PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid7
     )
     job_key: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    schedule_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("scheduler_schedules.id"),
+        nullable=True,
+        index=True,
+    )
     action: Mapped[str] = mapped_column(String(20), nullable=False)
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="PENDING", server_default="PENDING"

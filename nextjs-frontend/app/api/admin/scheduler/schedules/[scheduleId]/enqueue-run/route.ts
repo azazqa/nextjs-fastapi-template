@@ -1,12 +1,12 @@
 import { proxyAdminRequest } from "@/lib/admin-api-proxy";
 
-type Params = { params: Promise<{ jobKey: string }> };
+type Params = { params: Promise<{ scheduleId: string }> };
 
 export async function POST(request: Request, { params }: Params) {
-  const { jobKey } = await params;
+  const { scheduleId } = await params;
   return proxyAdminRequest(
     request,
-    `/admin/scheduler/jobs/${encodeURIComponent(jobKey)}/enqueue-run`,
+    `/admin/scheduler/schedules/${encodeURIComponent(scheduleId)}/enqueue-run`,
     "scheduler:manage",
   );
 }

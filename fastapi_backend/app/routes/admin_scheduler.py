@@ -2,19 +2,23 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
+from apscheduler.triggers.cron import CronTrigger
 from fastapi import APIRouter, Depends, Query
 from fastapi_pagination.ext.sqlalchemy import apaginate
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.current_user import CurrentUser, require
+from app.config import settings
 from app.database import get_async_session
 from app.exceptions import AppError, ConflictError, NotFoundError
-from app.models import SchedulerJob, SchedulerJobLog, SchedulerJobQueue
+from app.models import SchedulerJobLog, SchedulerJobQueue, SchedulerSchedule
 from app.pagination import Page, Params
-from scheduler.jobs.registry import REGISTERED_JOB_KEYS
+from scheduler.jobs._registry import get_registry
+from scheduler.jobs.registry import get_registered_job_keys
 
 router = APIRouter()
 
@@ -26,35 +30,70 @@ QUEUE_STATUS_PROCESSING = "PROCESSING"
 QUEUE_STATUS_CANCELLED = "CANCELLED"
 
 
-class SchedulerJobRead(BaseModel):
+def _validate_cron_expression(value: str) -> str:
+    try:
+        CronTrigger.from_crontab(value)
+    except ValueError as e:
+        raise ValueError(f"잘못된 Cron 표현식: {e}") from e
+    return value
+
+
+class SchedulerScheduleRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    id: UUID
     job_key: str
-    title: str
-    enabled: bool
-    cron_hour: int
-    cron_minute: int
+    name: str
+    cron_expression: str
     timezone: str
+    enabled: bool
+    payload: dict | list | None = None
+    concurrency_key: str | None = None
     description: str | None
+    registered: bool = True
 
 
-class SchedulerJobCreate(BaseModel):
+class SchedulerScheduleCreate(BaseModel):
     job_key: str = Field(min_length=1, max_length=100, pattern=r"^[a-z][a-z0-9_]*$")
-    title: str = Field(min_length=1, max_length=255)
+    name: str = Field(min_length=1, max_length=255)
+    cron_expression: str = Field(min_length=1, max_length=120)
     enabled: bool = True
-    cron_hour: int = Field(default=3, ge=0, le=23)
-    cron_minute: int = Field(default=0, ge=0, le=59)
-    timezone: str = Field(default="Asia/Seoul", max_length=64)
+    payload: dict | None = None
+    concurrency_key: str | None = Field(default=None, max_length=100)
     description: str | None = None
 
+    @field_validator("cron_expression")
+    @classmethod
+    def _cron(cls, v: str) -> str:
+        return _validate_cron_expression(v.strip())
 
-class SchedulerJobUpdate(BaseModel):
-    title: str | None = Field(default=None, max_length=255)
+
+class SchedulerScheduleUpdate(BaseModel):
+    name: str | None = Field(default=None, max_length=255)
+    cron_expression: str | None = Field(default=None, max_length=120)
     enabled: bool | None = None
-    cron_hour: int | None = Field(default=None, ge=0, le=23)
-    cron_minute: int | None = Field(default=None, ge=0, le=59)
-    timezone: str | None = Field(default=None, max_length=64)
+    payload: dict | None = None
+    concurrency_key: str | None = Field(default=None, max_length=100)
     description: str | None = None
+
+    @field_validator("cron_expression")
+    @classmethod
+    def _cron(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        return _validate_cron_expression(v.strip())
+
+
+class RegistryEntry(BaseModel):
+    job_key: str
+    title: str | None
+    registered: bool
+    schedule_count: int
+    description: str | None = None
+
+
+class CronPreviewResponse(BaseModel):
+    next_runs: list[datetime]
 
 
 class SchedulerJobQueueRead(BaseModel):
@@ -62,6 +101,7 @@ class SchedulerJobQueueRead(BaseModel):
 
     id: UUID
     job_key: str
+    schedule_id: UUID | None = None
     action: str
     status: str
     payload: dict | list | None = None
@@ -77,7 +117,9 @@ class SchedulerJobLogRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    job_id: str
+    job_key: str
+    queue_id: UUID | None = None
+    schedule_id: UUID | None = None
     started_at: datetime
     finished_at: datetime | None
     status: str
@@ -92,7 +134,9 @@ def _transform_logs(rows: list[SchedulerJobLog]) -> list[SchedulerJobLogRead]:
         out.append(
             SchedulerJobLogRead(
                 id=r.id,
-                job_id=r.job_id,
+                job_key=r.job_key,
+                queue_id=r.queue_id,
+                schedule_id=r.schedule_id,
                 started_at=r.started_at,
                 finished_at=r.finished_at,
                 status=r.status,
@@ -104,81 +148,143 @@ def _transform_logs(rows: list[SchedulerJobLog]) -> list[SchedulerJobLogRead]:
     return out
 
 
-@router.get("/job-keys", response_model=list[str])
-async def list_registered_job_keys(
-    _: CurrentUser = Depends(require("scheduler:read")),
-):
-    return sorted(REGISTERED_JOB_KEYS)
+def _schedule_read(row: SchedulerSchedule) -> SchedulerScheduleRead:
+    return SchedulerScheduleRead(
+        id=row.id,
+        job_key=row.job_key,
+        name=row.name,
+        cron_expression=row.cron_expression,
+        timezone=row.timezone,
+        enabled=row.enabled,
+        payload=row.payload,
+        concurrency_key=row.concurrency_key,
+        description=row.description,
+        registered=row.job_key in get_registered_job_keys(),
+    )
 
 
-@router.get("/jobs", response_model=list[SchedulerJobRead])
-async def list_scheduler_jobs(
-    q: str | None = Query(default=None, description="job_key 또는 title 검색"),
+@router.get("/registry", response_model=list[RegistryEntry])
+async def list_registry(
     session: AsyncSession = Depends(get_async_session),
     _: CurrentUser = Depends(require("scheduler:read")),
 ):
-    stmt = select(SchedulerJob).where(SchedulerJob.is_delete == False)  # noqa: E712
+    registry = get_registry()
+    counts_result = await session.execute(
+        select(SchedulerSchedule.job_key, func.count())
+        .where(SchedulerSchedule.is_delete == False)  # noqa: E712
+        .group_by(SchedulerSchedule.job_key)
+    )
+    counts = {job_key: int(n) for job_key, n in counts_result.all()}
+
+    entries: list[RegistryEntry] = []
+    for key, spec in sorted(registry.items()):
+        entries.append(
+            RegistryEntry(
+                job_key=key,
+                title=spec.title,
+                registered=True,
+                schedule_count=counts.get(key, 0),
+                description=spec.description,
+            )
+        )
+    for job_key, n in sorted(counts.items()):
+        if job_key not in registry:
+            entries.append(
+                RegistryEntry(
+                    job_key=job_key,
+                    title=None,
+                    registered=False,
+                    schedule_count=n,
+                )
+            )
+    return entries
+
+
+@router.get("/cron-preview", response_model=CronPreviewResponse)
+async def cron_preview(
+    cron_expression: str = Query(..., min_length=1),
+    count: int = Query(default=5, ge=1, le=20),
+    _: CurrentUser = Depends(require("scheduler:read")),
+):
+    try:
+        expr = _validate_cron_expression(cron_expression.strip())
+        tz = ZoneInfo(settings.TZ)
+        trigger = CronTrigger.from_crontab(expr, timezone=tz)
+    except Exception as e:
+        raise AppError(f"잘못된 Cron 표현식: {e}") from e
+
+    now = datetime.now(tz=tz)
+    runs: list[datetime] = []
+    previous: datetime | None = None
+    cursor = now
+    for _ in range(count):
+        nxt = trigger.get_next_fire_time(previous, cursor)
+        if nxt is None:
+            break
+        runs.append(nxt)
+        previous = nxt
+        cursor = nxt
+    return CronPreviewResponse(next_runs=runs)
+
+
+@router.get("/schedules", response_model=list[SchedulerScheduleRead])
+async def list_scheduler_schedules(
+    q: str | None = Query(default=None, description="name 또는 job_key 검색"),
+    session: AsyncSession = Depends(get_async_session),
+    _: CurrentUser = Depends(require("scheduler:read")),
+):
+    stmt = select(SchedulerSchedule).where(
+        SchedulerSchedule.is_delete == False  # noqa: E712
+    )
     if q and q.strip():
         term = f"%{q.strip()}%"
         stmt = stmt.where(
-            SchedulerJob.job_key.ilike(term) | SchedulerJob.title.ilike(term)
+            SchedulerSchedule.name.ilike(term) | SchedulerSchedule.job_key.ilike(term)
         )
-    stmt = stmt.order_by(SchedulerJob.job_key.asc())
+    stmt = stmt.order_by(SchedulerSchedule.name.asc(), SchedulerSchedule.id.asc())
     result = await session.execute(stmt)
-    return list(result.scalars().all())
+    return [_schedule_read(row) for row in result.scalars().all()]
 
 
-@router.post("/jobs", response_model=SchedulerJobRead, status_code=201)
-async def create_scheduler_job(
-    body: SchedulerJobCreate,
+@router.post("/schedules", response_model=SchedulerScheduleRead, status_code=201)
+async def create_scheduler_schedule(
+    body: SchedulerScheduleCreate,
     session: AsyncSession = Depends(get_async_session),
     _: CurrentUser = Depends(require("scheduler:manage")),
 ):
-    if body.job_key not in REGISTERED_JOB_KEYS:
-        raise AppError(
-            f"job_key must be one of: {', '.join(sorted(REGISTERED_JOB_KEYS))}"
-        )
-    existing = await session.get(SchedulerJob, body.job_key)
-    if existing is not None:
-        if existing.is_delete:
-            for k, v in body.model_dump().items():
-                setattr(existing, k, v)
-            existing.is_delete = False
-            await session.commit()
-            await session.refresh(existing)
-            return existing
-        raise ConflictError("Job already exists")
-
-    row = SchedulerJob(**body.model_dump())
+    keys = get_registered_job_keys()
+    if body.job_key not in keys:
+        raise AppError(f"job_key must be one of: {', '.join(sorted(keys))}")
+    row = SchedulerSchedule(**body.model_dump(), timezone=settings.TZ)
     session.add(row)
     await session.commit()
     await session.refresh(row)
-    return row
+    return _schedule_read(row)
 
 
-@router.delete("/jobs/{job_key}", status_code=204)
-async def delete_scheduler_job(
-    job_key: str,
+@router.delete("/schedules/{schedule_id}", status_code=204)
+async def delete_scheduler_schedule(
+    schedule_id: UUID,
     session: AsyncSession = Depends(get_async_session),
     _: CurrentUser = Depends(require("scheduler:manage")),
 ):
-    row = await session.get(SchedulerJob, job_key)
+    row = await session.get(SchedulerSchedule, schedule_id)
     if row is None or row.is_delete:
-        raise NotFoundError("Job not found")
+        raise NotFoundError("Schedule not found")
     row.is_delete = True
     await session.commit()
 
 
-@router.patch("/jobs/{job_key}", response_model=SchedulerJobRead)
-async def update_scheduler_job(
-    job_key: str,
-    body: SchedulerJobUpdate,
+@router.patch("/schedules/{schedule_id}", response_model=SchedulerScheduleRead)
+async def update_scheduler_schedule(
+    schedule_id: UUID,
+    body: SchedulerScheduleUpdate,
     session: AsyncSession = Depends(get_async_session),
     _: CurrentUser = Depends(require("scheduler:manage")),
 ):
-    row = await session.get(SchedulerJob, job_key)
+    row = await session.get(SchedulerSchedule, schedule_id)
     if row is None or row.is_delete:
-        raise NotFoundError("Job not found")
+        raise NotFoundError("Schedule not found")
 
     data = body.model_dump(exclude_unset=True)
     if not data:
@@ -188,23 +294,42 @@ async def update_scheduler_job(
         setattr(row, k, v)
     await session.commit()
     await session.refresh(row)
-    return row
+    return _schedule_read(row)
 
 
-@router.post("/jobs/{job_key}/enqueue-run", response_model=SchedulerJobQueueRead)
+@router.post(
+    "/schedules/{schedule_id}/enqueue-run",
+    response_model=SchedulerJobQueueRead,
+)
 async def enqueue_run_now(
-    job_key: str,
+    schedule_id: UUID,
     session: AsyncSession = Depends(get_async_session),
     user: CurrentUser = Depends(require("scheduler:manage")),
 ):
-    job = await session.get(SchedulerJob, job_key)
-    if job is None or job.is_delete:
-        raise NotFoundError("Job definition not found")
+    schedule = await session.get(SchedulerSchedule, schedule_id)
+    if schedule is None or schedule.is_delete:
+        raise NotFoundError("Schedule not found")
+
+    dup = await session.scalar(
+        select(SchedulerJobQueue.id)
+        .where(
+            SchedulerJobQueue.schedule_id == schedule_id,
+            SchedulerJobQueue.status.in_(
+                (QUEUE_STATUS_PENDING, QUEUE_STATUS_PROCESSING)
+            ),
+            SchedulerJobQueue.is_delete == False,  # noqa: E712
+        )
+        .limit(1)
+    )
+    if dup is not None:
+        raise ConflictError("이미 대기 중이거나 실행 중인 요청이 있습니다")
 
     q = SchedulerJobQueue(
-        job_key=job_key,
+        job_key=schedule.job_key,
+        schedule_id=schedule.id,
         action=QUEUE_ACTION_RUN_NOW,
         status=QUEUE_STATUS_PENDING,
+        payload=schedule.payload,
         requested_by_user_id=user.id,
     )
     session.add(q)
@@ -255,21 +380,24 @@ async def cancel_queue_item(
 @router.get("/job-logs", response_model=Page[SchedulerJobLogRead])
 async def list_job_logs(
     params: Params = Depends(),
-    job_id: str | None = Query(default=None),
+    job_key: str | None = Query(default=None),
     status: str | None = Query(default=None),
     session: AsyncSession = Depends(get_async_session),
     _: CurrentUser = Depends(require("scheduler:read")),
 ):
     q = select(SchedulerJobLog).where(SchedulerJobLog.is_delete == False)  # noqa: E712
-    if job_id and job_id.strip():
-        q = q.where(SchedulerJobLog.job_id == job_id.strip())
+    if job_key and job_key.strip():
+        q = q.where(SchedulerJobLog.job_key == job_key.strip())
     if status and status.strip():
         q = q.where(SchedulerJobLog.status == status.strip().upper())
     q = q.order_by(SchedulerJobLog.started_at.desc(), SchedulerJobLog.id.desc())
     return await apaginate(session, q, params, transformer=_transform_logs)
 
 
-@router.post("/job-logs/{log_id}/clear-stuck-and-enqueue", response_model=SchedulerJobQueueRead)
+@router.post(
+    "/job-logs/{log_id}/clear-stuck-and-enqueue",
+    response_model=SchedulerJobQueueRead,
+)
 async def clear_stuck_running_log_and_enqueue(
     log_id: UUID,
     min_age_seconds: int = Query(default=90, ge=5, le=86400),
@@ -304,7 +432,8 @@ async def clear_stuck_running_log_and_enqueue(
     )
 
     q = SchedulerJobQueue(
-        job_key=log.job_id,
+        job_key=log.job_key,
+        schedule_id=log.schedule_id,
         action=QUEUE_ACTION_RESTART,
         status=QUEUE_STATUS_PENDING,
         requested_by_user_id=user.id,

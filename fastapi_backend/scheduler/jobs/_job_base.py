@@ -24,22 +24,38 @@ class JobResult:
     status: str
     detail: dict[str, Any]
     error_message: str | None = None
+    log_id: uuid.UUID | None = None
 
     @property
     def elapsed_sec(self) -> float:
         return (self.finished_at - self.started_at).total_seconds()
 
 
-def _insert_job_log(db, job_id: str) -> uuid.UUID:
+def _insert_job_log(
+    db,
+    job_key: str,
+    *,
+    queue_id: uuid.UUID | None = None,
+    schedule_id: uuid.UUID | None = None,
+) -> uuid.UUID:
     log_id = uuid.uuid7()
     db.execute(
         text(
             """
-            INSERT INTO scheduler_job_log(id, job_id, started_at, status)
-            VALUES (:id, :job_id, NOW(), 'RUNNING')
+            INSERT INTO scheduler_job_log(
+                id, job_key, started_at, status, queue_id, schedule_id
+            )
+            VALUES (
+                :id, :job_key, NOW(), 'RUNNING', :queue_id, :schedule_id
+            )
             """
         ),
-        {"id": log_id, "job_id": job_id},
+        {
+            "id": log_id,
+            "job_key": job_key,
+            "queue_id": queue_id,
+            "schedule_id": schedule_id,
+        },
     )
     db.commit()
     return log_id
@@ -83,6 +99,8 @@ def run_job(
     lock_key: str,
     work_fn: Callable[[], dict[str, Any]],
     engine: Engine | None = None,
+    queue_id: uuid.UUID | None = None,
+    schedule_id: uuid.UUID | None = None,
 ) -> JobResult | None:
     """
     Generic job runner with advisory lock and scheduler_job_log recording.
@@ -94,7 +112,13 @@ def run_job(
     with advisory_lock(lock_key, engine=engine) as lock_db:
         if lock_db is None:
             return None
-        return _run_job(job_key=job_key, work_fn=work_fn, engine=engine)
+        return _run_job(
+            job_key=job_key,
+            work_fn=work_fn,
+            engine=engine,
+            queue_id=queue_id,
+            schedule_id=schedule_id,
+        )
 
 
 def _run_job(
@@ -102,14 +126,22 @@ def _run_job(
     job_key: str,
     work_fn: Callable[[], dict[str, Any]],
     engine: Engine,
+    queue_id: uuid.UUID | None = None,
+    schedule_id: uuid.UUID | None = None,
 ) -> JobResult:
     started_at = datetime.now(tz=timezone.utc)
     detail: dict[str, Any] = {}
     error_message: str | None = None
     status = "SUCCESS"
+    log_id: uuid.UUID | None = None
 
     with scheduler_session(engine) as db:
-        log_id = _insert_job_log(db, job_id=job_key)
+        log_id = _insert_job_log(
+            db,
+            job_key=job_key,
+            queue_id=queue_id,
+            schedule_id=schedule_id,
+        )
         logger.info("[JOB] start job=%s (log_id=%s)", job_key, log_id)
 
         try:
@@ -134,7 +166,9 @@ def _run_job(
             )
         except Exception:
             db.rollback()
-            logger.exception("[JOB] failed to finalize scheduler_job_log (log_id=%s)", log_id)
+            logger.exception(
+                "[JOB] failed to finalize scheduler_job_log (log_id=%s)", log_id
+            )
 
     result = JobResult(
         started_at=started_at,
@@ -142,6 +176,7 @@ def _run_job(
         status=status,
         detail=detail,
         error_message=error_message,
+        log_id=log_id,
     )
     logger.info(
         "[JOB] finished job=%s status=%s elapsed=%.1fs",

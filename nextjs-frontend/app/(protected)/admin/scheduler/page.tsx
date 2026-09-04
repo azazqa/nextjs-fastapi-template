@@ -9,10 +9,11 @@ import {
   canCancelQueue,
   QUEUE_STATUS_OPTIONS,
   queueStatusLabel,
-  type SchedulerJobFormState,
-  type SchedulerJobRow,
+  type RegistryEntry,
   type SchedulerQueuePage,
   type SchedulerQueueRow,
+  type SchedulerScheduleFormState,
+  type SchedulerScheduleRow,
 } from "@/lib/scheduler-status";
 import { PagePagination } from "@/components/page-pagination";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,14 @@ async function readApiError(res: Response): Promise<string> {
   return text || `요청 실패 (HTTP ${res.status})`;
 }
 
+function formatCronErrorMessage(raw: string): string {
+  const cleaned = raw
+    .replace(/^Value error,\s*/i, "")
+    .replace(/^(invalid cron expression|잘못된 Cron 표현식):\s*/i, "")
+    .trim();
+  return cleaned ? `잘못된 Cron 표현식: ${cleaned}` : "잘못된 Cron 표현식입니다.";
+}
+
 function StatusBadge({ status }: { status: string }) {
   const label = queueStatusLabel(status);
   let cls = "bg-muted text-muted-foreground";
@@ -72,20 +81,18 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-const defaultJobForm = (jobKey = ""): SchedulerJobFormState => ({
+const defaultScheduleForm = (jobKey = ""): SchedulerScheduleFormState => ({
   job_key: jobKey,
-  title: "",
+  name: "",
+  cron_expression: "0 * * * *",
   enabled: true,
-  cron_hour: 3,
-  cron_minute: 0,
-  timezone: "Asia/Seoul",
   description: "",
 });
 
 export default function AdminSchedulerPage() {
   const router = useRouter();
   const params = useSearchParams();
-  const tab = params.get("tab") === "queue" ? "queue" : "jobs";
+  const tab = params.get("tab") === "queue" ? "queue" : "schedules";
 
   const page = Number(params.get("page")) || 1;
   const size = Number(params.get("size")) || 20;
@@ -93,16 +100,16 @@ export default function AdminSchedulerPage() {
   const queueJobKey = params.get("job_key") ?? "";
   const queueQ = params.get("q") ?? "";
 
-  const jobsQ = params.get("jobs_q") ?? "";
+  const schedulesQ = params.get("schedules_q") ?? "";
 
   const [queueStatusSelect, setQueueStatusSelect] = useState(queueStatus || "__all__");
   useEffect(() => {
     setQueueStatusSelect(queueStatus || "__all__");
   }, [queueStatus]);
 
-  const [jobs, setJobs] = useState<SchedulerJobRow[]>([]);
-  const [jobsLoading, setJobsLoading] = useState(true);
-  const [jobsError, setJobsError] = useState("");
+  const [schedules, setSchedules] = useState<SchedulerScheduleRow[]>([]);
+  const [schedulesLoading, setSchedulesLoading] = useState(true);
+  const [schedulesError, setSchedulesError] = useState("");
 
   const [queueLoading, setQueueLoading] = useState(true);
   const [queueError, setQueueError] = useState("");
@@ -114,13 +121,20 @@ export default function AdminSchedulerPage() {
     pages: 1,
   });
 
-  const [jobDialogOpen, setJobDialogOpen] = useState(false);
-  const [jobDialogMode, setJobDialogMode] = useState<"create" | "edit">("create");
-  const [jobForm, setJobForm] = useState<SchedulerJobFormState>(() => defaultJobForm());
-  const [registeredJobKeys, setRegisteredJobKeys] = useState<string[]>([]);
-  const [editJobKey, setEditJobKey] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<SchedulerJobRow | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<"create" | "edit">("create");
+  const [form, setForm] = useState<SchedulerScheduleFormState>(() => defaultScheduleForm());
+  const [registry, setRegistry] = useState<RegistryEntry[]>([]);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SchedulerScheduleRow | null>(null);
   const [busy, setBusy] = useState(false);
+  const [cronPreview, setCronPreview] = useState<string[]>([]);
+  const [cronError, setCronError] = useState("");
+
+  const registeredJobs = useMemo(
+    () => registry.filter((e) => e.registered),
+    [registry],
+  );
 
   const queueExtraQuery = useMemo(() => {
     const q = new URLSearchParams();
@@ -131,21 +145,23 @@ export default function AdminSchedulerPage() {
     return q.toString();
   }, [queueStatus, queueJobKey, queueQ]);
 
-  const loadJobs = useCallback(async () => {
-    setJobsLoading(true);
-    setJobsError("");
+  const loadSchedules = useCallback(async () => {
+    setSchedulesLoading(true);
+    setSchedulesError("");
     const sp = new URLSearchParams();
-    if (jobsQ.trim()) sp.set("q", jobsQ.trim());
+    if (schedulesQ.trim()) sp.set("q", schedulesQ.trim());
     try {
-      const res = await fetch(`/api/admin/scheduler/jobs?${sp.toString()}`, { cache: "no-store" });
+      const res = await fetch(`/api/admin/scheduler/schedules?${sp.toString()}`, {
+        cache: "no-store",
+      });
       if (!res.ok) throw new Error(await readApiError(res));
-      setJobs((await res.json()) as SchedulerJobRow[]);
+      setSchedules((await res.json()) as SchedulerScheduleRow[]);
     } catch (e) {
-      setJobsError(e instanceof Error ? e.message : "Job 목록 조회 실패");
+      setSchedulesError(e instanceof Error ? e.message : "스케줄 목록 조회 실패");
     } finally {
-      setJobsLoading(false);
+      setSchedulesLoading(false);
     }
-  }, [jobsQ]);
+  }, [schedulesQ]);
 
   const loadQueue = useCallback(async () => {
     setQueueLoading(true);
@@ -157,7 +173,9 @@ export default function AdminSchedulerPage() {
     if (queueJobKey.trim()) sp.set("job_key", queueJobKey.trim());
     if (queueQ.trim()) sp.set("q", queueQ.trim());
     try {
-      const res = await fetch(`/api/admin/scheduler/queue?${sp.toString()}`, { cache: "no-store" });
+      const res = await fetch(`/api/admin/scheduler/queue?${sp.toString()}`, {
+        cache: "no-store",
+      });
       if (!res.ok) throw new Error(await readApiError(res));
       setQueueResult((await res.json()) as SchedulerQueuePage);
     } catch (e) {
@@ -168,18 +186,17 @@ export default function AdminSchedulerPage() {
   }, [page, size, queueStatus, queueJobKey, queueQ]);
 
   useEffect(() => {
-    if (tab === "jobs") void loadJobs();
-  }, [tab, loadJobs]);
+    if (tab === "schedules") void loadSchedules();
+  }, [tab, loadSchedules]);
 
   useEffect(() => {
     void (async () => {
       try {
-        const res = await fetch("/api/admin/scheduler/job-keys", { cache: "no-store" });
+        const res = await fetch("/api/admin/scheduler/registry", { cache: "no-store" });
         if (!res.ok) return;
-        const keys = (await res.json()) as string[];
-        setRegisteredJobKeys(keys);
+        setRegistry((await res.json()) as RegistryEntry[]);
       } catch {
-        /* ignore — create dialog falls back to empty list */
+        /* ignore */
       }
     })();
   }, []);
@@ -188,64 +205,113 @@ export default function AdminSchedulerPage() {
     if (tab === "queue") void loadQueue();
   }, [tab, loadQueue]);
 
-  const openCreateJob = () => {
-    setJobDialogMode("create");
-    setEditJobKey(null);
-    setJobForm(defaultJobForm(registeredJobKeys[0] ?? ""));
-    setJobDialogOpen(true);
+  useEffect(() => {
+    if (!dialogOpen) {
+      setCronPreview([]);
+      setCronError("");
+      return;
+    }
+    const expr = form.cron_expression.trim();
+    if (!expr) {
+      setCronPreview([]);
+      setCronError("");
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const sp = new URLSearchParams({
+            cron_expression: expr,
+            count: "5",
+          });
+          const res = await fetch(`/api/admin/scheduler/cron-preview?${sp}`, {
+            cache: "no-store",
+          });
+          if (!res.ok) {
+            setCronPreview([]);
+            setCronError(formatCronErrorMessage(await readApiError(res)));
+            return;
+          }
+          const body = (await res.json()) as { next_runs: string[] };
+          setCronPreview(body.next_runs ?? []);
+          setCronError("");
+        } catch {
+          setCronPreview([]);
+          setCronError("잘못된 Cron 표현식입니다.");
+        }
+      })();
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [dialogOpen, form.cron_expression]);
+
+  const openCreate = () => {
+    setDialogMode("create");
+    setEditId(null);
+    setForm(defaultScheduleForm(registeredJobs[0]?.job_key ?? ""));
+    setDialogOpen(true);
   };
 
-  const openEditJob = (row: SchedulerJobRow) => {
-    setJobDialogMode("edit");
-    setEditJobKey(row.job_key);
-    setJobForm({
+  const openEdit = (row: SchedulerScheduleRow) => {
+    setDialogMode("edit");
+    setEditId(row.id);
+    setForm({
       job_key: row.job_key,
-      title: row.title,
+      name: row.name,
+      cron_expression: row.cron_expression,
       enabled: row.enabled,
-      cron_hour: row.cron_hour,
-      cron_minute: row.cron_minute,
-      timezone: row.timezone,
       description: row.description ?? "",
     });
-    setJobDialogOpen(true);
+    setDialogOpen(true);
   };
 
-  const saveJob = async () => {
+  const saveSchedule = async () => {
+    if (cronError) {
+      toast.error(cronError);
+      return;
+    }
     setBusy(true);
     try {
       const body = {
-        title: jobForm.title.trim(),
-        enabled: jobForm.enabled,
-        cron_hour: Number(jobForm.cron_hour),
-        cron_minute: Number(jobForm.cron_minute),
-        timezone: jobForm.timezone.trim() || "Asia/Seoul",
-        description: jobForm.description.trim() || null,
+        name: form.name.trim(),
+        enabled: form.enabled,
+        cron_expression: form.cron_expression.trim(),
+        description: form.description.trim() || null,
       };
-      if (jobDialogMode === "create") {
-        const res = await fetch("/api/admin/scheduler/jobs", {
+      if (dialogMode === "create") {
+        const res = await fetch("/api/admin/scheduler/schedules", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            job_key: jobForm.job_key,
+            job_key: form.job_key,
             ...body,
           }),
         });
-        if (!res.ok) throw new Error(await readApiError(res));
-        toast.success("Job이 등록되었습니다.");
-      } else if (editJobKey) {
+        if (!res.ok) {
+          const msg = await readApiError(res);
+          throw new Error(
+            /cron/i.test(msg) ? formatCronErrorMessage(msg) : msg,
+          );
+        }
+        toast.success("스케줄이 등록되었습니다.");
+      } else if (editId) {
         const res = await fetch(
-          `/api/admin/scheduler/jobs/${encodeURIComponent(editJobKey)}`,
+          `/api/admin/scheduler/schedules/${encodeURIComponent(editId)}`,
           {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
           },
         );
-        if (!res.ok) throw new Error(await readApiError(res));
-        toast.success("Job이 수정되었습니다.");
+        if (!res.ok) {
+          const msg = await readApiError(res);
+          throw new Error(
+            /cron/i.test(msg) ? formatCronErrorMessage(msg) : msg,
+          );
+        }
+        toast.success("스케줄이 수정되었습니다.");
       }
-      setJobDialogOpen(false);
-      await loadJobs();
+      setDialogOpen(false);
+      await loadSchedules();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "저장 실패");
     } finally {
@@ -253,18 +319,18 @@ export default function AdminSchedulerPage() {
     }
   };
 
-  const confirmDeleteJob = async () => {
+  const confirmDelete = async () => {
     if (!deleteTarget) return;
     setBusy(true);
     try {
       const res = await fetch(
-        `/api/admin/scheduler/jobs/${encodeURIComponent(deleteTarget.job_key)}`,
+        `/api/admin/scheduler/schedules/${encodeURIComponent(deleteTarget.id)}`,
         { method: "DELETE" },
       );
       if (!res.ok && res.status !== 204) throw new Error(await readApiError(res));
-      toast.success("Job이 삭제되었습니다.");
+      toast.success("스케줄이 삭제되었습니다.");
       setDeleteTarget(null);
-      await loadJobs();
+      await loadSchedules();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "삭제 실패");
     } finally {
@@ -272,11 +338,11 @@ export default function AdminSchedulerPage() {
     }
   };
 
-  const enqueueRun = async (jobKey: string) => {
+  const enqueueRun = async (scheduleId: string) => {
     setBusy(true);
     try {
       const res = await fetch(
-        `/api/admin/scheduler/jobs/${encodeURIComponent(jobKey)}/enqueue-run`,
+        `/api/admin/scheduler/schedules/${encodeURIComponent(scheduleId)}/enqueue-run`,
         { method: "POST" },
       );
       if (!res.ok) throw new Error(await readApiError(res));
@@ -292,10 +358,9 @@ export default function AdminSchedulerPage() {
   const cancelQueue = async (row: SchedulerQueueRow) => {
     setBusy(true);
     try {
-      const res = await fetch(
-        `/api/admin/scheduler/queue/${row.id}/cancel`,
-        { method: "POST" },
-      );
+      const res = await fetch(`/api/admin/scheduler/queue/${row.id}/cancel`, {
+        method: "POST",
+      });
       if (!res.ok) throw new Error(await readApiError(res));
       toast.success("실행이 중지되었습니다.");
       await loadQueue();
@@ -306,13 +371,13 @@ export default function AdminSchedulerPage() {
     }
   };
 
-  const onJobsSearch = (e: FormEvent<HTMLFormElement>) => {
+  const onSchedulesSearch = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const q = new URLSearchParams();
-    q.set("tab", "jobs");
-    const jq = String(fd.get("jobs_q") ?? "").trim();
-    if (jq) q.set("jobs_q", jq);
+    q.set("tab", "schedules");
+    const sq = String(fd.get("schedules_q") ?? "").trim();
+    if (sq) q.set("schedules_q", sq);
     router.push(`/admin/scheduler?${q.toString()}`);
   };
 
@@ -335,7 +400,7 @@ export default function AdminSchedulerPage() {
   const setTab = (value: string) => {
     const q = new URLSearchParams(params.toString());
     q.set("tab", value);
-    if (value === "jobs") {
+    if (value === "schedules") {
       q.delete("page");
     } else if (!q.get("page")) {
       q.set("page", "1");
@@ -353,76 +418,88 @@ export default function AdminSchedulerPage() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
-          <TabsTrigger value="jobs">Job 정의</TabsTrigger>
+          <TabsTrigger value="schedules">스케줄</TabsTrigger>
           <TabsTrigger value="queue">실행 이력</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="jobs" className="space-y-4">
+        <TabsContent value="schedules" className="space-y-4">
           <section className="rounded-lg bg-card p-6 shadow-lg">
-            <form onSubmit={onJobsSearch} className="mb-4 flex flex-wrap items-end gap-3">
+            <form onSubmit={onSchedulesSearch} className="mb-4 flex flex-wrap items-end gap-3">
               <Field className="w-[280px]">
-                <FieldLabel htmlFor="jobs_q">검색 (키·제목)</FieldLabel>
-                <Input id="jobs_q" name="jobs_q" defaultValue={jobsQ} placeholder="job_key 또는 제목" />
+                <FieldLabel htmlFor="schedules_q">검색 (이름·키)</FieldLabel>
+                <Input
+                  id="schedules_q"
+                  name="schedules_q"
+                  defaultValue={schedulesQ}
+                  placeholder="name 또는 job_key"
+                />
               </Field>
-              <Button type="submit">
-                검색
-              </Button>
-              <Button type="button" variant="outline" onClick={() => router.push("/admin/scheduler?tab=jobs")}>
+              <Button type="submit">검색</Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => router.push("/admin/scheduler?tab=schedules")}
+              >
                 초기화
               </Button>
               <div className="flex-1" />
-              <Button type="button" onClick={openCreateJob}>
-                Job 등록
+              <Button type="button" onClick={openCreate}>
+                스케줄 등록
               </Button>
             </form>
 
-            {jobsError ? <p className="text-sm text-destructive">{jobsError}</p> : null}
+            {schedulesError ? (
+              <p className="text-sm text-destructive">{schedulesError}</p>
+            ) : null}
 
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>이름</TableHead>
                   <TableHead>Job 키</TableHead>
-                  <TableHead>제목</TableHead>
                   <TableHead>활성</TableHead>
-                  <TableHead>스케줄</TableHead>
-                  <TableHead>타임존</TableHead>
+                  <TableHead>Cron</TableHead>
                   <TableHead className="text-right">작업</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {jobsLoading ? (
+                {schedulesLoading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground">
+                    <TableCell colSpan={5} className="text-center text-muted-foreground">
                       불러오는 중…
                     </TableCell>
                   </TableRow>
-                ) : jobs.length === 0 ? (
+                ) : schedules.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground">
-                      등록된 Job이 없습니다.
+                    <TableCell colSpan={5} className="text-center text-muted-foreground">
+                      등록된 스케줄이 없습니다.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  jobs.map((row) => (
-                    <TableRow key={row.job_key}>
-                      <TableCell className="font-mono text-sm">{row.job_key}</TableCell>
-                      <TableCell>{row.title}</TableCell>
-                      <TableCell>{row.enabled ? "Y" : "N"}</TableCell>
+                  schedules.map((row) => (
+                    <TableRow key={row.id}>
                       <TableCell>
-                        {String(row.cron_hour).padStart(2, "0")}:{String(row.cron_minute).padStart(2, "0")}
+                        <span className="font-medium">{row.name}</span>
+                        {!row.registered ? (
+                          <span className="ml-2 inline-flex rounded bg-destructive/10 px-2 py-0.5 text-xs text-destructive">
+                            고아
+                          </span>
+                        ) : null}
                       </TableCell>
-                      <TableCell>{row.timezone}</TableCell>
-                      <TableCell className="text-right space-x-1">
+                      <TableCell className="font-mono text-sm">{row.job_key}</TableCell>
+                      <TableCell>{row.enabled ? "Y" : "N"}</TableCell>
+                      <TableCell className="font-mono text-sm">{row.cron_expression}</TableCell>
+                      <TableCell className="space-x-1 text-right">
                         <Button
                           type="button"
                           size="sm"
                           variant="outline"
-                          disabled={busy}
-                          onClick={() => void enqueueRun(row.job_key)}
+                          disabled={busy || !row.registered}
+                          onClick={() => void enqueueRun(row.id)}
                         >
                           즉시 실행
                         </Button>
-                        <Button type="button" size="sm" variant="secondary" onClick={() => openEditJob(row)}>
+                        <Button type="button" size="sm" variant="secondary" onClick={() => openEdit(row)}>
                           수정
                         </Button>
                         <Button
@@ -469,9 +546,7 @@ export default function AdminSchedulerPage() {
                 <Input id="queue_q" name="q" defaultValue={queueQ} />
               </Field>
               <div className="flex items-end gap-2 lg:col-span-2">
-                <Button type="submit">
-                  검색
-                </Button>
+                <Button type="submit">검색</Button>
                 <Button
                   type="button"
                   variant="outline"
@@ -494,6 +569,7 @@ export default function AdminSchedulerPage() {
                   <TableHead>요청 시각</TableHead>
                   <TableHead>시작</TableHead>
                   <TableHead>종료</TableHead>
+                  <TableHead>로그</TableHead>
                   <TableHead>오류</TableHead>
                   <TableHead className="text-right">작업</TableHead>
                 </TableRow>
@@ -501,20 +577,22 @@ export default function AdminSchedulerPage() {
               <TableBody>
                 {queueLoading ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground">
+                    <TableCell colSpan={10} className="text-center text-muted-foreground">
                       불러오는 중…
                     </TableCell>
                   </TableRow>
                 ) : queueResult.items.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground">
+                    <TableCell colSpan={10} className="text-center text-muted-foreground">
                       실행 이력이 없습니다.
                     </TableCell>
                   </TableRow>
                 ) : (
                   queueResult.items.map((row) => (
                     <TableRow key={row.id}>
-                      <TableCell>{row.id}</TableCell>
+                      <TableCell className="max-w-[120px] truncate font-mono text-xs">
+                        {row.id}
+                      </TableCell>
                       <TableCell className="font-mono text-sm">{row.job_key}</TableCell>
                       <TableCell>{row.action}</TableCell>
                       <TableCell>
@@ -523,7 +601,17 @@ export default function AdminSchedulerPage() {
                       <TableCell>{formatDateTimeInSeoul(row.created_at)}</TableCell>
                       <TableCell>{formatDateTimeInSeoul(row.started_at)}</TableCell>
                       <TableCell>{formatDateTimeInSeoul(row.finished_at)}</TableCell>
-                      <TableCell className="max-w-[200px] truncate text-xs" title={row.error_message ?? ""}>
+                      <TableCell className="font-mono text-xs">
+                        {row.related_log_id ? (
+                          <span title={row.related_log_id}>{row.related_log_id.slice(0, 8)}…</span>
+                        ) : (
+                          "-"
+                        )}
+                      </TableCell>
+                      <TableCell
+                        className="max-w-[200px] truncate text-xs"
+                        title={row.error_message ?? ""}
+                      >
                         {row.error_message ?? "-"}
                       </TableCell>
                       <TableCell className="text-right">
@@ -559,27 +647,29 @@ export default function AdminSchedulerPage() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={jobDialogOpen} onOpenChange={setJobDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{jobDialogMode === "create" ? "Job 등록" : "Job 수정"}</DialogTitle>
+            <DialogTitle>
+              {dialogMode === "create" ? "스케줄 등록" : "스케줄 수정"}
+            </DialogTitle>
           </DialogHeader>
           <FieldGroup>
             <FieldSet className="space-y-3">
-              {jobDialogMode === "create" ? (
+              {dialogMode === "create" ? (
                 <Field>
                   <FieldLabel>Job 키</FieldLabel>
                   <Select
-                    value={jobForm.job_key}
-                    onValueChange={(v) => setJobForm((f) => ({ ...f, job_key: v }))}
+                    value={form.job_key}
+                    onValueChange={(v) => setForm((f) => ({ ...f, job_key: v }))}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {registeredJobKeys.map((k) => (
-                        <SelectItem key={k} value={k}>
-                          {k}
+                      {registeredJobs.map((e) => (
+                        <SelectItem key={e.job_key} value={e.job_key}>
+                          {e.title ? `${e.title} (${e.job_key})` : e.job_key}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -588,75 +678,77 @@ export default function AdminSchedulerPage() {
               ) : (
                 <Field>
                   <FieldLabel>Job 키</FieldLabel>
-                  <Input value={editJobKey ?? ""} disabled />
+                  <Input value={form.job_key} disabled />
                 </Field>
               )}
               <Field>
-                <FieldLabel>제목</FieldLabel>
+                <FieldLabel>이름</FieldLabel>
                 <Input
-                  value={jobForm.title}
-                  onChange={(e) => setJobForm((f) => ({ ...f, title: e.target.value }))}
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 />
               </Field>
               <Field orientation="horizontal">
                 <Checkbox
-                  id="job_enabled"
-                  checked={jobForm.enabled}
+                  id="schedule_enabled"
+                  checked={form.enabled}
                   onCheckedChange={(checked) =>
-                    setJobForm((f) => ({ ...f, enabled: checked === true }))
+                    setForm((f) => ({ ...f, enabled: checked === true }))
                   }
                 />
-                <FieldLabel htmlFor="job_enabled" className="font-normal">
+                <FieldLabel htmlFor="schedule_enabled" className="font-normal">
                   활성 (cron 자동 실행)
                 </FieldLabel>
               </Field>
-              <div className="grid grid-cols-2 gap-3">
-                <Field>
-                  <FieldLabel>시 (0–23)</FieldLabel>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={23}
-                    value={jobForm.cron_hour}
-                    onChange={(e) =>
-                      setJobForm((f) => ({ ...f, cron_hour: Number(e.target.value) }))
-                    }
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel>분 (0–59)</FieldLabel>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={59}
-                    value={jobForm.cron_minute}
-                    onChange={(e) =>
-                      setJobForm((f) => ({ ...f, cron_minute: Number(e.target.value) }))
-                    }
-                  />
-                </Field>
-              </div>
               <Field>
-                <FieldLabel>타임존</FieldLabel>
+                <FieldLabel>Cron 표현식</FieldLabel>
                 <Input
-                  value={jobForm.timezone}
-                  onChange={(e) => setJobForm((f) => ({ ...f, timezone: e.target.value }))}
+                  className={`font-mono ${cronError ? "border-destructive" : ""}`}
+                  value={form.cron_expression}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, cron_expression: e.target.value }))
+                  }
+                  placeholder="0 * * * * (매시 정각)"
+                  aria-invalid={Boolean(cronError)}
                 />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  분 시 일 월 요일 — 예: <code>0 * * * *</code> 매시,{" "}
+                  <code>*/10 * * * *</code> 10분마다
+                </p>
+                {cronError ? (
+                  <p className="mt-1 text-sm text-destructive">{cronError}</p>
+                ) : null}
+                {!cronError && cronPreview.length > 0 ? (
+                  <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground">
+                    {cronPreview.map((t) => (
+                      <li key={t}>다음: {formatDateTimeInSeoul(t)}</li>
+                    ))}
+                  </ul>
+                ) : null}
               </Field>
               <Field>
                 <FieldLabel>설명</FieldLabel>
                 <Input
-                  value={jobForm.description}
-                  onChange={(e) => setJobForm((f) => ({ ...f, description: e.target.value }))}
+                  value={form.description}
+                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                 />
               </Field>
             </FieldSet>
           </FieldGroup>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setJobDialogOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
               취소
             </Button>
-            <Button type="button" disabled={busy || !jobForm.title.trim()} onClick={() => void saveJob()}>
+            <Button
+              type="button"
+              disabled={
+                busy ||
+                !form.name.trim() ||
+                !form.cron_expression.trim() ||
+                Boolean(cronError)
+              }
+              onClick={() => void saveSchedule()}
+            >
               저장
             </Button>
           </DialogFooter>
@@ -666,16 +758,22 @@ export default function AdminSchedulerPage() {
       <Dialog open={deleteTarget !== null} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Job 삭제</DialogTitle>
+            <DialogTitle>스케줄 삭제</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            <span className="font-mono">{deleteTarget?.job_key}</span> 정의를 삭제할까요?
+            <span className="font-medium">{deleteTarget?.name}</span> (
+            <span className="font-mono">{deleteTarget?.job_key}</span>) 을 삭제할까요?
           </p>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)}>
               취소
             </Button>
-            <Button type="button" variant="destructive" disabled={busy} onClick={() => void confirmDeleteJob()}>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={busy}
+              onClick={() => void confirmDelete()}
+            >
               삭제
             </Button>
           </DialogFooter>

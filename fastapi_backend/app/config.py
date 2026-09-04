@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     # Frontend
     FRONTEND_URL: str = "http://localhost:3000"
 
+    # Timezone (cron schedules, APScheduler; docker-compose also sets TZ)
+    TZ: str = "Asia/Seoul"
+
     # CORS
     CORS_ORIGINS: Set[str]
 

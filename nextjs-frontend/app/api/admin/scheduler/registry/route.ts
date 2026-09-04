@@ -1,5 +1,5 @@
 import { proxyAdminRequest } from "@/lib/admin-api-proxy";
 
 export async function GET(request: Request) {
-  return proxyAdminRequest(request, "/admin/scheduler/job-keys", "scheduler:read");
+  return proxyAdminRequest(request, "/admin/scheduler/registry", "scheduler:read");
 }
