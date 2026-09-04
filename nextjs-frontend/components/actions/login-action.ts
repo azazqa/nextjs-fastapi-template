@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { setAccessCookie, setRefreshCookie } from "@/lib/auth-cookies";
 import { loginSchema } from "@/lib/definitions";
 import { readSetCookie } from "@/lib/parse-set-cookie";
-import { getErrorMessage } from "@/lib/utils";
+import { getErrorMessage } from "@/lib/errors";
 
 export async function login(prevState: unknown, formData: FormData) {
   const validatedFields = loginSchema.safeParse({

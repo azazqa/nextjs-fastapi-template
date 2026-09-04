@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/pagination";
 import { buildPageWindow } from "@/components/pagination-window";
 import { cn } from "@/lib/utils";
-import { DoubleArrowLeftIcon, DoubleArrowRightIcon } from "@radix-ui/react-icons";
+import { ChevronsLeft, ChevronsRight } from "lucide-react";
 
 interface PagePaginationProps {
   currentPage: number;
@@ -61,7 +61,7 @@ export function PagePagination({
               className="border-0 shadow-none"
               aria-label="First page"
             >
-              <DoubleArrowLeftIcon className="h-4 w-4" />
+              <ChevronsLeft className="h-4 w-4" />
             </PaginationLink>
           </PaginationItem>
 
@@ -106,7 +106,7 @@ export function PagePagination({
               className="border-0 shadow-none"
               aria-label="Last page"
             >
-              <DoubleArrowRightIcon className="h-4 w-4" />
+              <ChevronsRight className="h-4 w-4" />
             </PaginationLink>
           </PaginationItem>
         </PaginationContent>

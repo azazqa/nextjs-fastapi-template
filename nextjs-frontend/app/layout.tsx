@@ -1,11 +1,16 @@
 import type { Metadata } from "next";
-import { Noto_Sans_KR, Inter } from "next/font/google";
+import { Noto_Sans_KR } from "next/font/google";
 import NextTopLoader from "nextjs-toploader";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 
-const inter = Inter({subsets:['latin'],variable:'--font-sans'});
+const notoSansKR = Noto_Sans_KR({
+  subsets: ["latin"],
+  weight: ["100", "200", "300", "400", "500", "700", "900"],
+  variable: "--font-sans",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Application",
@@ -18,8 +23,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={cn("font-sans", inter.variable)}>
-      <body className={`${inter.variable}`}>
+    <html lang="ko" className={cn("font-sans", notoSansKR.variable)}>
+      <body>
         <NextTopLoader color="#2563eb" height={3} showSpinner={false} />
         {children}
         <Toaster richColors />
