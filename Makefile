@@ -32,13 +32,16 @@ test-backend: ## Run backend tests using pytest
 
 
 # Frontend commands
-.PHONY: start-frontend test-frontend
+.PHONY: start-frontend test-frontend typecheck-frontend
 
 start-frontend: ## Start the frontend server with pnpm and hot reload
 	cd $(FRONTEND_DIR) && ./start.sh
 
 test-frontend: ## Run frontend tests using npm
 	cd $(FRONTEND_DIR) && pnpm run test
+
+typecheck-frontend: ## Run frontend TypeScript check (tsc --noEmit)
+	cd $(FRONTEND_DIR) && pnpm run tsc
 
 
 # Docker commands

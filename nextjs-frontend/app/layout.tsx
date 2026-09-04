@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { Noto_Sans_KR } from "next/font/google";
 import NextTopLoader from "nextjs-toploader";
 import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
+import { cn } from "@/lib/utils";
 
 const notoSansKR = Noto_Sans_KR({
   subsets: ["latin"],
@@ -22,11 +24,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${notoSansKR.variable}`}>
-        <NextTopLoader color="#2563eb" height={3} showSpinner={false} />
-        {children}
-        <Toaster richColors />
+    <html lang="ko" className={cn("font-sans", notoSansKR.variable)}>
+      <body>
+        <TooltipProvider delayDuration={0}>
+          <NextTopLoader color="var(--primary)" height={3} showSpinner={false} />
+          {children}
+          <Toaster richColors />
+        </TooltipProvider>
       </body>
     </html>
   );
