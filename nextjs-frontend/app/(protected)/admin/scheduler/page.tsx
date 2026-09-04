@@ -60,10 +60,10 @@ async function readApiError(res: Response): Promise<string> {
 function StatusBadge({ status }: { status: string }) {
   const label = queueStatusLabel(status);
   let cls = "bg-muted text-muted-foreground";
-  if (status === "PENDING") cls = "bg-warning-soft text-warning-soft-foreground";
-  if (status === "PROCESSING") cls = "bg-info-soft text-info-soft-foreground";
-  if (status === "SUCCEEDED") cls = "bg-success-soft text-success-soft-foreground";
-  if (status === "FAILED") cls = "bg-destructive-soft text-destructive-soft-foreground";
+  if (status === "PENDING") cls = "bg-muted text-muted-foreground";
+  if (status === "PROCESSING") cls = "bg-secondary text-secondary-foreground";
+  if (status === "SUCCEEDED") cls = "bg-primary text-primary-foreground";
+  if (status === "FAILED") cls = "bg-destructive/10 text-destructive";
   if (status === "CANCELLED") cls = "bg-secondary text-secondary-foreground";
   return (
     <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${cls}`}>
@@ -364,7 +364,7 @@ export default function AdminSchedulerPage() {
                 <FieldLabel htmlFor="jobs_q">검색 (키·제목)</FieldLabel>
                 <Input id="jobs_q" name="jobs_q" defaultValue={jobsQ} placeholder="job_key 또는 제목" />
               </Field>
-              <Button type="submit" variant="secondary">
+              <Button type="submit">
                 검색
               </Button>
               <Button type="button" variant="outline" onClick={() => router.push("/admin/scheduler?tab=jobs")}>
@@ -469,7 +469,7 @@ export default function AdminSchedulerPage() {
                 <Input id="queue_q" name="q" defaultValue={queueQ} />
               </Field>
               <div className="flex items-end gap-2 lg:col-span-2">
-                <Button type="submit" variant="secondary">
+                <Button type="submit">
                   검색
                 </Button>
                 <Button

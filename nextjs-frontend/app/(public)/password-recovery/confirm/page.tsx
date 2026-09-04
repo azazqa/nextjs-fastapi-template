@@ -26,8 +26,8 @@ function ResetPasswordForm() {
   }
 
   return (
-    <form action={dispatch}>
-      <Card className="w-full max-w-sm">
+    <form action={dispatch} className="w-full max-w-sm">
+      <Card className="w-full">
         <CardHeader>
           <CardTitle className="text-2xl">Reset your Password</CardTitle>
           <CardDescription>

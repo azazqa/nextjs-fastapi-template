@@ -20,8 +20,8 @@ export default function Page() {
   const [state, dispatch] = useActionState(login, undefined);
   return (
     <div className="flex h-screen w-full items-center justify-center bg-background px-4">
-      <form action={dispatch}>
-        <Card className="w-full max-w-sm rounded-lg shadow-lg">
+      <form action={dispatch} className="w-full max-w-sm">
+        <Card className="w-full rounded-lg shadow-lg">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl font-semibold">
               Login
