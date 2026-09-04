@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Noto_Sans_KR } from "next/font/google";
 import NextTopLoader from "nextjs-toploader";
 import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 
@@ -25,9 +26,11 @@ export default function RootLayout({
   return (
     <html lang="ko" className={cn("font-sans", notoSansKR.variable)}>
       <body>
-        <NextTopLoader color="var(--primary)" height={3} showSpinner={false} />
-        {children}
-        <Toaster richColors />
+        <TooltipProvider delayDuration={0}>
+          <NextTopLoader color="var(--primary)" height={3} showSpinner={false} />
+          {children}
+          <Toaster richColors />
+        </TooltipProvider>
       </body>
     </html>
   );
