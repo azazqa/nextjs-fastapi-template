@@ -16,8 +16,8 @@ import {
 } from "@/lib/scheduler-status";
 import { PagePagination } from "@/components/page-pagination";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -598,14 +598,17 @@ export default function AdminSchedulerPage() {
                   onChange={(e) => setJobForm((f) => ({ ...f, title: e.target.value }))}
                 />
               </Field>
-              <Field className="flex items-center gap-2">
-                <input
-                  type="checkbox"
+              <Field orientation="horizontal">
+                <Checkbox
                   id="job_enabled"
                   checked={jobForm.enabled}
-                  onChange={(e) => setJobForm((f) => ({ ...f, enabled: e.target.checked }))}
+                  onCheckedChange={(checked) =>
+                    setJobForm((f) => ({ ...f, enabled: checked === true }))
+                  }
                 />
-                <Label htmlFor="job_enabled">활성 (cron 자동 실행)</Label>
+                <FieldLabel htmlFor="job_enabled" className="font-normal">
+                  활성 (cron 자동 실행)
+                </FieldLabel>
               </Field>
               <div className="grid grid-cols-2 gap-3">
                 <Field>

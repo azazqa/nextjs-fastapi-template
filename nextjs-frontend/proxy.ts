@@ -21,7 +21,15 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if ((token || refreshToken) && isPublicPath(pathname)) {
+  // Do NOT bounce /login → / when cookies exist.
+  // Stale/invalid cookies after 401 would loop: /login → / → clear? → /login.
+  // Logged-in users can still open /login; successful login overwrites cookies.
+  // Password recovery: send authenticated sessions home.
+  if (
+    (token || refreshToken) &&
+    (pathname === "/password-recovery" ||
+      pathname.startsWith("/password-recovery/"))
+  ) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 

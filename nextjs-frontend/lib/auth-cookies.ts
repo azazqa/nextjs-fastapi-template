@@ -52,7 +52,9 @@ export async function clearAuthCookies(store?: CookieStore): Promise<void> {
   const cookieStore = store ?? (await cookies());
   for (const name of ["accessToken", "refreshToken"]) {
     try {
-      cookieStore.delete(name);
+      // delete() alone may not clear httpOnly cookies set with path/secure;
+      // expire with the same options used by setAccess/setRefreshCookie.
+      cookieStore.set(name, "", { ...cookieOptions, maxAge: 0 });
     } catch {
       // Route handler 컨텍스트에서 삭제가 금지될 수 있다
     }
