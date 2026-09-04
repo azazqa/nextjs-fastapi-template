@@ -307,10 +307,12 @@ CLI가 실수로 들어간 것이 아니다. 새 `globals.css` 3행이 이 패�
 - [x] **F4** `layout.tsx` — Inter → Noto Sans KR, `lang="ko"`, `<body>` 중복 variable 제거
 - [x] `npx tsc --noEmit` → 0 errors
 - [x] `pnpm build` (`next build --webpack`) 성공
-- [ ] 관리자 화면 육안 확인 — `new-york` → `radix-nova` 전환으로 버튼 variant/size 클래스 문자열이 달라졌다
+- [x] 관리자 화면 육안 확인 — `new-york` → `radix-nova` 전환으로 버튼 variant/size 클래스 문자열이 달라졌다
 - [x] D1 `font-size: 12px` 결정 — **되살리지 않음**
-- [ ] (후속) 하드코딩 색상 76곳 → 토큰
-- [ ] (후속) 서비스별 테마 레이어 `theme/tokens.css` 도입
+- [x] D2 하드코딩 색상 → `app/theme/` 팔레트 토큰 (theme-palette-setup.md)
+- [ ] D3 ThemeProvider / 다크 모드 — **보류** (팔레트 적용 후 재검토)
+- [x] D4 Turbopack — webpack/`--webpack`/`fork-ts-checker` 제거
+- [ ] (후속) 서비스별 테마 레이어 — `palette.css` 교체로 충분 (도입됨)
 
 ---
 

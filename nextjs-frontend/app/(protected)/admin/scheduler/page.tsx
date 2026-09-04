@@ -60,11 +60,11 @@ async function readApiError(res: Response): Promise<string> {
 function StatusBadge({ status }: { status: string }) {
   const label = queueStatusLabel(status);
   let cls = "bg-muted text-muted-foreground";
-  if (status === "PENDING") cls = "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200";
-  if (status === "PROCESSING") cls = "bg-blue-100 text-blue-900 dark:bg-blue-950 dark:text-blue-200";
-  if (status === "SUCCEEDED") cls = "bg-green-100 text-green-900 dark:bg-green-950 dark:text-green-200";
-  if (status === "FAILED") cls = "bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200";
-  if (status === "CANCELLED") cls = "bg-gray-200 text-gray-800 dark:bg-gray-800 dark:text-gray-200";
+  if (status === "PENDING") cls = "bg-warning-soft text-warning-soft-foreground";
+  if (status === "PROCESSING") cls = "bg-info-soft text-info-soft-foreground";
+  if (status === "SUCCEEDED") cls = "bg-success-soft text-success-soft-foreground";
+  if (status === "FAILED") cls = "bg-destructive-soft text-destructive-soft-foreground";
+  if (status === "CANCELLED") cls = "bg-secondary text-secondary-foreground";
   return (
     <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${cls}`}>
       {label}
@@ -358,7 +358,7 @@ export default function AdminSchedulerPage() {
         </TabsList>
 
         <TabsContent value="jobs" className="space-y-4">
-          <section className="rounded-lg bg-white p-6 shadow-lg dark:bg-gray-900">
+          <section className="rounded-lg bg-card p-6 shadow-lg">
             <form onSubmit={onJobsSearch} className="mb-4 flex flex-wrap items-end gap-3">
               <Field className="w-[280px]">
                 <FieldLabel htmlFor="jobs_q">검색 (키·제목)</FieldLabel>
@@ -443,7 +443,7 @@ export default function AdminSchedulerPage() {
         </TabsContent>
 
         <TabsContent value="queue" className="space-y-4">
-          <section className="rounded-lg bg-white p-6 shadow-lg dark:bg-gray-900">
+          <section className="rounded-lg bg-card p-6 shadow-lg">
             <form onSubmit={onQueueSearch} className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-6">
               <Field>
                 <FieldLabel htmlFor="queue_status">상태</FieldLabel>

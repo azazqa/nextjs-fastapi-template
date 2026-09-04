@@ -20,24 +20,21 @@ export default function Page() {
   const [state, dispatch] = useActionState(passwordReset, undefined);
 
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
+    <div className="flex h-screen w-full items-center justify-center bg-background px-4">
       <form action={dispatch}>
-        <Card className="w-full max-w-sm rounded-lg shadow-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800">
+        <Card className="w-full max-w-sm rounded-lg shadow-lg">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-semibold text-gray-800 dark:text-white">
+            <CardTitle className="text-2xl font-semibold">
               Password Recovery
             </CardTitle>
-            <CardDescription className="text-sm text-gray-600 dark:text-gray-400">
+            <CardDescription className="text-sm">
               Enter your email to receive instructions to reset your password.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-6 p-6">
             <div className="grid gap-3">
-              <Label
-                htmlFor="email"
-                className="text-gray-700 dark:text-gray-300"
-              >
-                Email<span className="relative -top-1 text-sm text-red-500">*</span>
+              <Label htmlFor="email">
+                Email<span className="relative -top-1 text-sm text-destructive">*</span>
               </Label>
               <Input
                 id="email"
@@ -45,18 +42,17 @@ export default function Page() {
                 type="email"
                 placeholder="m@example.com"
                 required
-                className="border-gray-300 dark:border-gray-600"
               />
             </div>
             <SubmitButton text="Send" />
             <FormError state={state} />
-            <div className="mt-2 text-sm text-center text-blue-500">
+            <div className="mt-2 text-sm text-center text-primary">
               {state?.message && <p>{state.message}</p>}
             </div>
-            <div className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
+            <div className="mt-4 text-center text-sm text-muted-foreground">
               <Link
                 href="/login"
-                className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-500"
+                className="text-primary hover:text-primary/80"
               >
                 Back to login
               </Link>

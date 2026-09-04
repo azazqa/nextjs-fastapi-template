@@ -3,8 +3,8 @@
   "version": "0.0.8",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
-    "build": "next build --webpack",
+    "dev": "next dev",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -62,7 +62,6 @@
     "eslint": "^10.9.1",
     "eslint-config-next": "16.3.3",
     "eslint-config-prettier": "^10.1.8",
-    "fork-ts-checker-webpack-plugin": "^9.1.0",
     "globals": "^17.11.0",
     "jest": "^30.5.0",
     "jest-environment-jsdom": "^30.5.0",

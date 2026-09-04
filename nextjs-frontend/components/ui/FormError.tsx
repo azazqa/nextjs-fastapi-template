@@ -17,7 +17,7 @@ export function FormError({ state, className = "" }: FormErrorProps) {
   const error = state.server_validation_error || state.server_error;
   if (!error) return null;
 
-  return <p className={`text-sm text-red-500 ${className}`}>{error}</p>;
+  return <p className={`text-sm text-destructive ${className}`}>{error}</p>;
 }
 
 interface FieldErrorProps {
@@ -34,7 +34,7 @@ export function FieldError({ state, field, className = "" }: FieldErrorProps) {
 
   if (Array.isArray(error)) {
     return (
-      <div className={`text-sm text-red-500 ${className}`}>
+      <div className={`text-sm text-destructive ${className}`}>
         <ul className="list-disc ml-4">
           {error.map((err) => (
             <li key={err}>{err}</li>
@@ -44,5 +44,5 @@ export function FieldError({ state, field, className = "" }: FieldErrorProps) {
     );
   }
 
-  return <p className={`text-sm text-red-500 ${className}`}>{error}</p>;
+  return <p className={`text-sm text-destructive ${className}`}>{error}</p>;
 }

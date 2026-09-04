@@ -25,7 +25,7 @@ export default function RootLayout({
   return (
     <html lang="ko" className={cn("font-sans", notoSansKR.variable)}>
       <body>
-        <NextTopLoader color="#2563eb" height={3} showSpinner={false} />
+        <NextTopLoader color="var(--primary)" height={3} showSpinner={false} />
         {children}
         <Toaster richColors />
       </body>

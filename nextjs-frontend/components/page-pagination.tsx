@@ -42,7 +42,7 @@ export function PagePagination({
 
   return (
     <div className="flex items-center justify-between my-4">
-      <div className="text-sm text-gray-600">
+      <div className="text-sm text-muted-foreground">
         {totalItems === 0 ? (
           <>Showing 0 of 0 results</>
         ) : (
